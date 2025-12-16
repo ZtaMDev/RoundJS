@@ -1,6 +1,6 @@
 {
     "name": "round-core",
-    "version": "0.0.1",
+    "version": "0.0.2",
     "description": "A lightweight frontend framework for SPA with signals and fine grained reactivity",
     "main": "src/index.js",
     "type": "module",
@@ -25,11 +25,11 @@
     "author": "Round Framework Team",
     "license": "MIT",
     "dependencies": {
-        "marked": "^12.0.2"
+        "marked": "^12.0.2",
+        "vite": "^5.0.0",
+        "vitest": "^1.6.0"
     },
     "devDependencies": {
-        "vite": "^5.0.0",
-        "vitest": "^1.6.0",
         "jsdom": "^24.0.0",
         "bun-types": "latest",
         "@types/node": "latest"
