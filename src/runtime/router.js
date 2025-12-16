@@ -1,0 +1,371 @@
+import { signal, effect } from './signals.js';
+import { createElement } from './dom.js';
+
+const hasWindow = typeof window !== 'undefined' && typeof document !== 'undefined';
+
+const ROUTING_TRAILING_SLASH = (typeof __ROUND_ROUTING_TRAILING_SLASH__ !== 'undefined')
+    ? Boolean(__ROUND_ROUTING_TRAILING_SLASH__)
+    : true;
+
+const currentPath = signal(hasWindow ? window.location.pathname : '/');
+let listenerInitialized = false;
+
+let lastPathEvaluated = null;
+let hasMatchForPath = false;
+
+const pathHasMatch = signal(false);
+const pathEvalReady = signal(true);
+
+let defaultNotFoundComponent = null;
+let autoNotFoundMounted = false;
+let userProvidedNotFound = false;
+
+function ensureListener() {
+    if (!hasWindow || listenerInitialized) return;
+    listenerInitialized = true;
+
+    mountAutoNotFound();
+
+    window.addEventListener('popstate', () => {
+        currentPath(window.location.pathname);
+    });
+}
+
+export function getPathname() {
+    return normalizePathname(currentPath());
+}
+
+export function usePathname() {
+    return () => normalizePathname(currentPath());
+}
+
+export function getLocation() {
+    if (!hasWindow) {
+        return { pathname: normalizePathname('/'), search: '', hash: '' };
+    }
+    return {
+        pathname: normalizePathname(window.location.pathname),
+        search: window.location.search ?? '',
+        hash: window.location.hash ?? ''
+    };
+}
+
+export function useLocation() {
+    return () => {
+        const pathname = normalizePathname(currentPath());
+        if (!hasWindow) return { pathname, search: '', hash: '' };
+        return { pathname, search: window.location.search ?? '', hash: window.location.hash ?? '' };
+    };
+}
+
+export function getRouteReady() {
+    const pathname = normalizePathname(currentPath());
+    return Boolean(pathEvalReady()) && lastPathEvaluated === pathname;
+}
+
+export function useRouteReady() {
+    return () => {
+        const pathname = normalizePathname(currentPath());
+        return Boolean(pathEvalReady()) && lastPathEvaluated === pathname;
+    };
+}
+
+export function getIsNotFound() {
+    const pathname = normalizePathname(currentPath());
+    if (!(Boolean(pathEvalReady()) && lastPathEvaluated === pathname)) return false;
+    return !Boolean(pathHasMatch());
+}
+
+export function useIsNotFound() {
+    return () => {
+        const pathname = normalizePathname(currentPath());
+        if (!(Boolean(pathEvalReady()) && lastPathEvaluated === pathname)) return false;
+        return !Boolean(pathHasMatch());
+    };
+}
+
+function mountAutoNotFound() {
+    if (!hasWindow || autoNotFoundMounted) return;
+    autoNotFoundMounted = true;
+
+    const host = document.getElementById('app') ?? document.body;
+    const root = document.createElement('div');
+    root.setAttribute('data-round-auto-notfound', '1');
+    host.appendChild(root);
+
+    const view = createElement('span', { style: { display: 'contents' } }, () => {
+        if (userProvidedNotFound) return null;
+
+        const pathname = normalizePathname(currentPath());
+        const ready = pathEvalReady();
+        const hasMatch = pathHasMatch();
+
+        if (!ready) return null;
+        if (lastPathEvaluated !== pathname) return null;
+        if (hasMatch) return null;
+
+        const Comp = defaultNotFoundComponent;
+        if (typeof Comp === 'function') {
+            return createElement(Comp, { pathname });
+        }
+
+        return createElement('div', { style: { padding: '16px' } },
+            createElement('h1', null, '404'),
+            createElement('p', null, 'Page not found: ', pathname)
+        );
+    });
+
+    root.appendChild(view);
+}
+
+export function navigate(to, options = {}) {
+    if (!hasWindow) return;
+    ensureListener();
+
+    const normalizedTo = normalizeTo(to);
+    const replace = Boolean(options.replace);
+    if (replace) window.history.replaceState({}, '', normalizedTo);
+    else window.history.pushState({}, '', normalizedTo);
+
+    currentPath(window.location.pathname);
+}
+
+function applyHead({ title, meta, links, icon, favicon }) {
+    if (!hasWindow) return;
+
+    if (typeof title === 'string') {
+        document.title = title;
+    }
+
+    document.querySelectorAll('[data-round-head="1"]').forEach((n) => n.remove());
+
+    const iconHref = icon ?? favicon;
+    if (typeof iconHref === 'string' && iconHref.length) {
+        const el = document.createElement('link');
+        el.setAttribute('data-round-head', '1');
+        el.setAttribute('rel', 'icon');
+        el.setAttribute('href', iconHref);
+        document.head.appendChild(el);
+    }
+
+    if (Array.isArray(links)) {
+        links.forEach((l) => {
+            if (!l || typeof l !== 'object') return;
+            const el = document.createElement('link');
+            el.setAttribute('data-round-head', '1');
+            Object.entries(l).forEach(([k, v]) => {
+                if (v === null || v === undefined) return;
+                el.setAttribute(k, String(v));
+            });
+            document.head.appendChild(el);
+        });
+    }
+
+    if (Array.isArray(meta)) {
+        meta.forEach((entry) => {
+            if (!entry) return;
+            const el = document.createElement('meta');
+            el.setAttribute('data-round-head', '1');
+
+            if (Array.isArray(entry) && entry.length >= 2) {
+                const [name, content] = entry;
+                if (typeof name === 'string') el.setAttribute('name', name);
+                el.setAttribute('content', String(content ?? ''));
+            } else if (typeof entry === 'object') {
+                Object.entries(entry).forEach(([k, v]) => {
+                    if (v === null || v === undefined) return;
+                    el.setAttribute(k, String(v));
+                });
+            } else {
+                return;
+            }
+
+            document.head.appendChild(el);
+        });
+    } else if (meta && typeof meta === 'object') {
+        Object.entries(meta).forEach(([name, content]) => {
+            if (typeof name !== 'string') return;
+            const el = document.createElement('meta');
+            el.setAttribute('data-round-head', '1');
+            el.setAttribute('name', name);
+            el.setAttribute('content', String(content ?? ''));
+            document.head.appendChild(el);
+        });
+    }
+}
+
+export function startHead(_head) {
+    return _head;
+}
+
+function splitUrl(url) {
+    const str = String(url ?? '');
+    const hashIdx = str.indexOf('#');
+    const queryIdx = str.indexOf('?');
+    const cutIdx = (hashIdx === -1)
+        ? queryIdx
+        : (queryIdx === -1 ? hashIdx : Math.min(hashIdx, queryIdx));
+
+    if (cutIdx === -1) return { path: str, suffix: '' };
+    return { path: str.slice(0, cutIdx), suffix: str.slice(cutIdx) };
+}
+
+function normalizePathname(p) {
+    let pathname = String(p ?? '/');
+    if (!pathname.startsWith('/')) pathname = '/' + pathname;
+    if (pathname.length > 1) {
+        if (ROUTING_TRAILING_SLASH) {
+            if (!pathname.endsWith('/')) pathname += '/';
+        } else {
+            if (pathname.endsWith('/')) pathname = pathname.slice(0, -1);
+        }
+    }
+    return pathname;
+}
+
+function normalizeTo(to) {
+    const { path, suffix } = splitUrl(to);
+    if (!path.startsWith('/')) return String(to ?? '');
+    return normalizePathname(path) + suffix;
+}
+
+function matchRoute(route, pathname) {
+    const r = normalizePathname(route);
+    const p = normalizePathname(pathname);
+    return r === p;
+}
+
+function beginPathEvaluation(pathname) {
+    if (pathname !== lastPathEvaluated) {
+        lastPathEvaluated = pathname;
+        hasMatchForPath = false;
+        pathHasMatch(false);
+
+        pathEvalReady(false);
+        setTimeout(() => {
+            if (lastPathEvaluated !== pathname) return;
+            pathEvalReady(true);
+        }, 0);
+    }
+}
+
+export function setNotFound(Component) {
+    defaultNotFoundComponent = Component;
+}
+
+export function Route(props = {}) {
+    ensureListener();
+
+    return createElement('span', { style: { display: 'contents' } }, () => {
+        const pathname = normalizePathname(currentPath());
+        beginPathEvaluation(pathname);
+        const route = props.route ?? '/';
+        if (!matchRoute(route, pathname)) return null;
+
+        hasMatchForPath = true;
+        pathHasMatch(true);
+        const mergedHead = (props.head && typeof props.head === 'object') ? props.head : {};
+        const meta = props.description
+            ? ([{ name: 'description', content: String(props.description) }].concat(mergedHead.meta ?? props.meta ?? []))
+            : (mergedHead.meta ?? props.meta);
+        const links = mergedHead.links ?? props.links;
+        const title = mergedHead.title ?? props.title;
+        const icon = mergedHead.icon ?? props.icon;
+        const favicon = mergedHead.favicon ?? props.favicon;
+
+        applyHead({ title, meta, links, icon, favicon });
+        return props.children;
+    });
+}
+
+export function Page(props = {}) {
+    ensureListener();
+
+    return createElement('span', { style: { display: 'contents' } }, () => {
+        const pathname = normalizePathname(currentPath());
+        beginPathEvaluation(pathname);
+        const route = props.route ?? '/';
+        if (!matchRoute(route, pathname)) return null;
+
+        hasMatchForPath = true;
+        pathHasMatch(true);
+        const mergedHead = (props.head && typeof props.head === 'object') ? props.head : {};
+        const meta = props.description
+            ? ([{ name: 'description', content: String(props.description) }].concat(mergedHead.meta ?? props.meta ?? []))
+            : (mergedHead.meta ?? props.meta);
+        const links = mergedHead.links ?? props.links;
+        const title = mergedHead.title ?? props.title;
+        const icon = mergedHead.icon ?? props.icon;
+        const favicon = mergedHead.favicon ?? props.favicon;
+
+        applyHead({ title, meta, links, icon, favicon });
+        return props.children;
+    });
+}
+
+export function NotFound(props = {}) {
+    ensureListener();
+
+    userProvidedNotFound = true;
+
+    return createElement('span', { style: { display: 'contents' } }, () => {
+        const pathname = normalizePathname(currentPath());
+        beginPathEvaluation(pathname);
+
+        const ready = pathEvalReady();
+        const hasMatch = pathHasMatch();
+        if (!ready) return null;
+        if (lastPathEvaluated !== pathname) return null;
+
+        if (hasMatch) return null;
+
+        const Comp = props.component ?? defaultNotFoundComponent;
+        if (typeof Comp === 'function') {
+            return createElement(Comp, { pathname });
+        }
+
+        if (props.children !== undefined) return props.children;
+
+        return createElement('div', { style: { padding: '16px' } },
+            createElement('h1', null, '404'),
+            createElement('p', null, 'Page not found: ', pathname)
+        );
+    });
+}
+
+export function Link(props = {}) {
+    ensureListener();
+
+    const rawHref = props.href ?? props.to ?? '#';
+    const href = spaNormalizeHref(rawHref);
+
+     const spa = props.spa !== undefined ? Boolean(props.spa) : true;
+     const reload = Boolean(props.reload);
+
+    const onClick = (e) => {
+        if (typeof props.onClick === 'function') props.onClick(e);
+        if (e.defaultPrevented) return;
+
+        // Classic navigation: allow the browser to reload.
+        if (!spa || reload) return;
+
+        if (e.button !== 0) return;
+        if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+
+        e.preventDefault();
+        navigate(href);
+    };
+
+    const { children, to, ...rest } = props;
+    const normalizedChildren = Array.isArray(children)
+        ? children
+        : (children === undefined || children === null ? [] : [children]);
+
+    return createElement('a', { ...rest, href, onClick }, ...normalizedChildren);
+}
+
+function spaNormalizeHref(href) {
+    const str = String(href ?? '#');
+    if (!str.startsWith('/')) return str;
+    return normalizeTo(str);
+}

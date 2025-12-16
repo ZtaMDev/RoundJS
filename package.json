@@ -1,0 +1,40 @@
+{
+    "name": "round-core",
+    "version": "0.0.1",
+    "description": "A lightweight frontend framework for SPA with signals and fine grained reactivity",
+    "main": "src/index.js",
+    "type": "module",
+    "icon": "round.png",
+    "repository": {
+        "url": "https://github.com/ZtaMDev/RoundJS.git"
+    },
+    "bin": {
+        "round": "./src/cli.js"
+    },
+    "scripts": {
+        "dev": "node ./cli.js dev --config ./test/main/round.config.json",
+        "build": "node ./cli.js build --config ./test/main/round.config.json",
+        "test": "vitest run"
+    },
+    "keywords": [
+        "framework",
+        "spa",
+        "signals",
+        "vite"
+    ],
+    "author": "Round Framework Team",
+    "license": "MIT",
+    "dependencies": {
+        "marked": "^12.0.2"
+    },
+    "devDependencies": {
+        "vite": "^5.0.0",
+        "vitest": "^1.6.0",
+        "jsdom": "^24.0.0",
+        "bun-types": "latest",
+        "@types/node": "latest"
+    },
+    "peerDependencies": {
+        "bun": ">=1.0.0"
+    }
+}
