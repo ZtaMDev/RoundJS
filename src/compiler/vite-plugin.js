@@ -131,6 +131,9 @@ export default function RoundPlugin(pluginOptions = {}) {
         const trailingSlash = config?.routing?.trailingSlash;
         state.routingTrailingSlash = trailingSlash !== undefined ? Boolean(trailingSlash) : true;
 
+        const customTags = config?.htmlTags;
+        state.customTags = Array.isArray(customTags) ? customTags : [];
+
         const entryRel = config?.entry;
         state.entryAbs = entryRel ? resolveMaybeRelative(configDir, entryRel) : null;
 
@@ -303,7 +306,8 @@ export default function RoundPlugin(pluginOptions = {}) {
 
             return {
                 define: {
-                    __ROUND_ROUTING_TRAILING_SLASH__: JSON.stringify(state.routingTrailingSlash)
+                    __ROUND_ROUTING_TRAILING_SLASH__: JSON.stringify(state.routingTrailingSlash),
+                    __ROUND_CUSTOM_TAGS__: JSON.stringify(state.customTags ?? [])
                 },
                 esbuild: {
                     include: /\.(round|js|jsx|ts|tsx)$/,

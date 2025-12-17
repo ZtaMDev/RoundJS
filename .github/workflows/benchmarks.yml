@@ -1,0 +1,44 @@
+name: Framework Benchmarks
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  benchmark:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v3
+
+    - name: Setup Bun
+      uses: oven-sh/setup-bun@v1
+      with:
+        bun-version: latest
+
+    - name: Install Root Dependencies
+      run: bun install
+
+    - name: Build Round Core
+      run: bun run build:core
+
+    - name: Install Benchmark Dependencies
+      working-directory: ./benchmarks
+      run: bun install
+
+    - name: Run Build Benchmarks
+      working-directory: ./benchmarks
+      run: bun run bench:build
+
+    - name: Run Runtime Benchmarks
+      working-directory: ./benchmarks
+      run: bun run bench:runtime
+
+    - name: Upload Report
+      uses: actions/upload-artifact@v3
+      with:
+        name: benchmark-report
+        path: benchmarks/reports/build-bench.json

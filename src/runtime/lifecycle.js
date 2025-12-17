@@ -6,7 +6,7 @@ export function getCurrentComponent() {
     return componentStack[componentStack.length - 1];
 }
 
-export function runInContext(componentInstance, fn) {
+export function runInLifecycle(componentInstance, fn) {
     componentStack.push(componentInstance);
     try {
         return fn();

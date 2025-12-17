@@ -1,11 +1,11 @@
 <h1 align="center">Round Framework</h1>
  
 <p align="center">
-  <img src="https://raw.githubusercontent.com/ZtaMDev/RoundJS/main/Round.png" alt="Dars Framework Logo" width="200" />
+  <img src="https://raw.githubusercontent.com/ZtaMDev/RoundJS/main/Round.png" alt="Round Framework Logo" width="200" />
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/npm/v/round-core?color=brightgreen" alt="PyPI Version" />
+  <img src="https://img.shields.io/npm/v/round-core?color=brightgreen" alt="NPM Version" />
 </p>
 
 <p align="center">
@@ -25,6 +25,16 @@ Instead of a Virtual DOM diff, Round updates the UI by subscribing DOM updates d
 - **Ergonomic bindings**: built-in two-way bindings with `bind:*` directives.
 - **A JSX superset**: `.round` files support extra control-flow syntax that compiles to JavaScript.
 - **Minimal runtime**: DOM-first runtime (no VDOM diffing).
+
+## Architecture
+
+Round is a **No-VDOM** framework.
+
+1.  **Direct DOM Manipulation**: Components run once. They return real DOM nodes (via `document.createElement`).
+2.  **Fine-Grained Reactivity**: Use of `signal`, `effect`, and `bindable` creates a dependency graph.
+3.  **Surgical Updates**: When a signal changes, only the specific text node, attribute, or property subscribed to that signal is updated. The component function does not re-run.
+
+This avoids the overhead of Virtual DOM diffing and reconciliation entirely.
 
 ## Concepts
 
@@ -89,7 +99,7 @@ Example `src/app.round`:
 
 ```jsx
 import { Route } from 'round-core';
-import { Counter } from './counter';
+import { Counter } from './counter.round';
 
 export default function App() {
     return (
@@ -115,23 +125,41 @@ Create a reactive signal.
 ```jsx
 import { signal } from 'round-core';
 
-export function Counter() {
+export default function Counter() {
     const count = signal(0);
 
     return (
         <div>
             <h1>Count: {count()}</h1>
-            <button onClick={() => count(count() + 1)}>Increment</button>
+            <div style={{ display: 'flex', gap: '8px' }}>
+                <button onClick={() => count(count() + 1)}>Increment</button>
+                <button onClick={() => count(count() - 1)}>Decrement</button>
+            </div>
         </div>
     );
 }
+```
+
+### `derive(fn)`
+
+Create a computed signal that updates automatically when its dependencies change.
+
+```javascript
+import { signal, derive } from 'round-core';
+
+const count = signal(1);
+const double = derive(() => count() * 2);
+
+console.log(double()); // 2
+count(5);
+console.log(double()); // 10
 ```
 
 ### `effect(fn)`
 
 Run `fn` whenever the signals it reads change.
 
-```js
+```javascript
 import { signal, effect } from 'round-core';
 
 const name = signal('Ada');
@@ -162,6 +190,40 @@ export function Example() {
 }
 ```
 
+### `createStore(initialState, actions)`
+
+Create a shared global state store with actions and optional persistence.
+
+```javascript
+import { createStore } from 'round-core';
+
+// 1. Define Store
+const store = createStore({
+    todos: [],
+    filter: 'all'
+}, {
+    addTodo: (state, text) => ({ 
+        ...state, 
+        todos: [...state.todos, { text, done: false }] 
+    })
+});
+
+// 2. Use in Component
+export function TodoList() {
+    const todos = store.use('todos'); // Returns a bindable signal
+    
+    return (
+        <div>
+            {todos().map(todo => <div>{todo.text}</div>)}
+            <button onClick={() => store.addTodo('Buy Milk')}>Add</button>
+        </div>
+    );
+}
+
+// 3. Persistence (Optional)
+store.persist('my-app-store'); 
+```
+
 ### `bindable.object(initialObject)` and deep binding
 
 Round supports object-shaped state with ergonomic deep bindings via proxies.
@@ -184,37 +246,6 @@ export function Profile() {
             </label>
         </div>
     );
-}
-```
-
-### `$pick(path)`
-
-Create a view signal from a signal/bindable that holds an object.
-
-```js
-import { bindable } from 'round-core';
-
-const user = bindable({ profile: { bio: 'Hello' } });
-const bio = user.$pick('profile.bio');
-
-console.log(bio());
-```
-
-### `.transform(fromInput, toOutput)`
-
-Transform a signal/bindable to adapt between DOM values (often strings) and your internal representation.
-
-```jsx
-import { bindable } from 'round-core';
-
-export function AgeField() {
-    const age = bindable('18')
-        .transform(
-            (str) => Math.max(0, parseInt(str, 10) || 0),
-            (num) => String(num)
-        );
-
-    return <input type="number" bind:value={age} />;
 }
 ```
 
@@ -277,6 +308,7 @@ Notes:
 
 - Conditions may be normal JS expressions.
 - For *simple paths* like `flags.showCounter` (identifier/member paths), Round will auto-unwrap signal-like values (call them) so the condition behaves as expected.
+- Multiple elements inside a block are automatically wrapped in a Fragment.
 
 ### `for (... in ...)`
 
@@ -287,16 +319,6 @@ Notes:
 ```
 
 This compiles roughly to a `.map(...)` under the hood.
-
-## Rendering model (no VDOM)
-
-Round renders to the DOM directly using a small runtime:
-
-- Elements are created with `document.createElement(...)`.
-- Dynamic children and reactive props are updated via `effect()` subscriptions.
-- Components are functions returning DOM nodes (or arrays of nodes).
-
-This is a **DOM-first, fine-grained reactive model**, rather than a Virtual DOM diffing renderer.
 
 ## Routing
 
@@ -325,7 +347,15 @@ export default function App() {
 
 Round supports `Suspense` for promise-based rendering and `lazy()` for code splitting.
 
-(These APIs are evolving; expect improvements as Round’s compiler and runtime expand.)
+```jsx
+import { Suspense, lazy } from 'round-core';
+const LazyWidget = lazy(() => import('./Widget'));
+
+<Suspense fallback={<div>Loading...</div>}>
+    <LazyWidget />
+</Suspense>
+```
+
 
 ## Error handling
 

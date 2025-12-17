@@ -1,10 +1,17 @@
-#!/usr/bin/env node
+
 import path from 'node:path';
 import fs from 'node:fs';
 import process from 'node:process';
 import { fileURLToPath } from 'node:url';
 import { createServer, build as viteBuild, preview as vitePreview } from 'vite';
 import RoundPlugin from './compiler/vite-plugin.js';
+
+// Handle graceful shutdown
+function onSignal() {
+    process.exit(0);
+}
+process.on('SIGINT', onSignal);
+process.on('SIGTERM', onSignal);
 
 function normalizePath(p) {
     return p.replaceAll('\\', '/');
@@ -239,7 +246,7 @@ async function runInit({ name }) {
             preview: 'round preview'
         },
         dependencies: {
-            'round-core': '^0.0.1'
+            'round-core': '^0.0.4'
         },
         devDependencies: {
             vite: '^5.0.0'
@@ -272,7 +279,7 @@ async function runInit({ name }) {
 
     writeFileIfMissing(viteConfigPath, [
         "import { defineConfig } from 'vite';",
-        "import RoundPlugin from 'round-core/src/compiler/vite-plugin.js';",
+        "import RoundPlugin from 'round-core/vite-plugin';",
         '',
         'export default defineConfig({',
         "    plugins: [RoundPlugin({ configPath: './round.config.json' })],",

@@ -1,5 +1,5 @@
 import { effect, untrack } from './signals.js';
-import { runInContext as runInLifecycle, createComponentInstance, mountComponent, initLifecycleRoot } from './lifecycle.js';
+import { runInLifecycle, createComponentInstance, mountComponent, initLifecycleRoot } from './lifecycle.js';
 import { reportErrorSafe } from './error-reporter.js';
 import { captureContext, runInContext, readContext } from './context.js';
 import { SuspenseContext } from './suspense.js';
@@ -76,14 +76,13 @@ export function createElement(tag, props = {}, ...children) {
 
     if (typeof tag === 'string') {
         const isCustomElement = tag.includes('-');
-        // Simple check: if it looks like a component (no hyphen, lowercase start)
-        // and it's not a standard tag, it's likely an error.
-        // We use a small heuristic list or regex.
-        // Actually, user requested: "custom components when they start with lowercase... should give error".
-        // Using a whitelist of standard tags is robust.
-        const isStandard = /^(a|abbr|address|area|article|aside|audio|b|base|bdi|bdo|blockquote|body|br|button|canvas|caption|cite|code|col|colgroup|data|datalist|dd|del|details|dfn|dialog|div|dl|dt|em|embed|fieldset|figcaption|figure|footer|form|h1|h2|h3|h4|h5|h6|head|header|hgroup|hr|html|i|iframe|img|input|ins|kbd|label|legend|li|link|main|map|mark|meta|meter|nav|noscript|object|ol|optgroup|option|output|p|param|picture|pre|progress|q|rp|rt|ruby|s|samp|script|section|select|slot|small|source|span|strong|style|sub|summary|sup|svg|table|tbody|td|template|textarea|tfoot|th|thead|time|title|tr|track|u|ul|var|video|wbr|path|circle|rect|line|g|defs|linearGradient|stop|radialGradient|text|tspan)$/.test(tag);
 
-        if (!isCustomElement && !isStandard && /^[a-z]/.test(tag)) {
+        const isStandard = /^(a|abbr|address|area|article|aside|audio|b|base|bdi|bdo|blockquote|body|br|button|canvas|caption|cite|code|col|colgroup|data|datalist|dd|del|details|dfn|dialog|div|dl|dt|em|embed|fieldset|figcaption|figure|footer|form|h1|h2|h3|h4|h5|h6|head|header|hgroup|hr|html|i|iframe|img|input|ins|kbd|label|legend|li|link|main|map|mark|meta|meter|nav|noscript|object|ol|optgroup|option|output|p|param|picture|pre|progress|q|rp|rt|ruby|s|samp|script|search|section|select|slot|small|source|span|strong|style|sub|summary|sup|svg|table|tbody|td|template|textarea|tfoot|th|thead|time|title|tr|track|u|ul|var|video|wbr|menu|animate|animateMotion|animateTransform|circle|clipPath|defs|desc|ellipse|feBlend|feColorMatrix|feComponentTransfer|feComposite|feConvolveMatrix|feDiffuseLighting|feDisplacementMap|feDistantLight|feDropShadow|feFlood|feFuncA|feFuncB|feFuncG|feFuncR|feGaussianBlur|feImage|feMerge|feMergeNode|feMorphology|feOffset|fePointLight|feSpecularLighting|feSpotLight|feTile|feTurbulence|filter|foreignObject|g|image|line|linearGradient|marker|mask|metadata|mpath|path|pattern|polygon|polyline|radialGradient|rect|set|stop|switch|symbol|text|textPath|tspan|use|view)$/.test(tag);
+
+        // __ROUND_CUSTOM_TAGS__ is injected by the vite plugin from round.config.json
+        const isCustomConfigured = typeof __ROUND_CUSTOM_TAGS__ !== 'undefined' && __ROUND_CUSTOM_TAGS__.includes(tag);
+
+        if (!isCustomElement && !isStandard && !isCustomConfigured && /^[a-z]/.test(tag)) {
             throw new Error(`Component names must start with an uppercase letter: <${tag} />`);
         }
     }
@@ -270,6 +269,21 @@ export function createElement(tag, props = {}, ...children) {
                     else if (key === 'checked') element.checked = Boolean(val);
                     else element.setAttribute(key, val);
                 }, { onLoad: false });
+                return;
+            }
+
+            if (key === 'classList') {
+                if (value && typeof value === 'object') {
+                    Object.entries(value).forEach(([className, condition]) => {
+                        if (typeof condition === 'function') {
+                            effect(() => {
+                                element.classList.toggle(className, !!condition());
+                            }, { onLoad: false });
+                        } else {
+                            element.classList.toggle(className, !!condition);
+                        }
+                    });
+                }
                 return;
             }
 
