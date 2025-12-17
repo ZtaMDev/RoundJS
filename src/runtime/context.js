@@ -11,7 +11,7 @@ function popContext() {
     contextStack.pop();
 }
 
-function readContext(ctx) {
+export function readContext(ctx) {
     for (let i = contextStack.length - 1; i >= 0; i--) {
         const layer = contextStack[i];
         if (layer && Object.prototype.hasOwnProperty.call(layer, ctx.id)) {
@@ -59,4 +59,20 @@ export function bindContext(ctx) {
         }
         return provided;
     };
+}
+
+export function captureContext() {
+    return contextStack.slice();
+}
+
+export function runInContext(snapshot, fn) {
+    const prev = contextStack.slice();
+    contextStack.length = 0;
+    contextStack.push(...snapshot);
+    try {
+        return fn();
+    } finally {
+        contextStack.length = 0;
+        contextStack.push(...prev);
+    }
 }

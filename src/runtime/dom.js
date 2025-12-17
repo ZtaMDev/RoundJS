@@ -1,6 +1,9 @@
 import { effect, untrack } from './signals.js';
-import { runInContext, createComponentInstance, mountComponent, initLifecycleRoot } from './lifecycle.js';
+import { runInContext as runInLifecycle, createComponentInstance, mountComponent, initLifecycleRoot } from './lifecycle.js';
 import { reportErrorSafe } from './error-reporter.js';
+import { captureContext, runInContext, readContext } from './context.js';
+import { SuspenseContext } from './suspense.js';
+
 
 let isObserverInitialized = false;
 
@@ -32,14 +35,20 @@ export function createElement(tag, props = {}, ...children) {
         const componentName = tag?.name ?? 'Anonymous';
         componentInstance.name = componentName;
 
-        let node = runInContext(componentInstance, () => {
+        let node = runInLifecycle(componentInstance, () => {
             const componentProps = { ...props, children };
             try {
                 const res = untrack(() => tag(componentProps));
                 if (isPromiseLike(res)) throw res;
                 return res;
             } catch (e) {
-                if (isPromiseLike(e)) throw e;
+                if (isPromiseLike(e)) {
+                    const suspense = readContext(SuspenseContext);
+                    if (!suspense) {
+                        throw new Error("cannot instance a lazy component outside a suspense");
+                    }
+                    throw e;
+                }
                 reportErrorSafe(e, { phase: 'component.render', component: componentName });
                 return createElement('div', { style: { padding: '16px' } }, `Error in ${componentName}`);
             }
@@ -63,6 +72,20 @@ export function createElement(tag, props = {}, ...children) {
         }
 
         return node;
+    }
+
+    if (typeof tag === 'string') {
+        const isCustomElement = tag.includes('-');
+        // Simple check: if it looks like a component (no hyphen, lowercase start)
+        // and it's not a standard tag, it's likely an error.
+        // We use a small heuristic list or regex.
+        // Actually, user requested: "custom components when they start with lowercase... should give error".
+        // Using a whitelist of standard tags is robust.
+        const isStandard = /^(a|abbr|address|area|article|aside|audio|b|base|bdi|bdo|blockquote|body|br|button|canvas|caption|cite|code|col|colgroup|data|datalist|dd|del|details|dfn|dialog|div|dl|dt|em|embed|fieldset|figcaption|figure|footer|form|h1|h2|h3|h4|h5|h6|head|header|hgroup|hr|html|i|iframe|img|input|ins|kbd|label|legend|li|link|main|map|mark|meta|meter|nav|noscript|object|ol|optgroup|option|output|p|param|picture|pre|progress|q|rp|rt|ruby|s|samp|script|section|select|slot|small|source|span|strong|style|sub|summary|sup|svg|table|tbody|td|template|textarea|tfoot|th|thead|time|title|tr|track|u|ul|var|video|wbr|path|circle|rect|line|g|defs|linearGradient|stop|radialGradient|text|tspan)$/.test(tag);
+
+        if (!isCustomElement && !isStandard && /^[a-z]/.test(tag)) {
+            throw new Error(`Component names must start with an uppercase letter: <${tag} />`);
+        }
     }
 
     const element = document.createElement(tag);
@@ -282,54 +305,65 @@ function appendChild(parent, child) {
 
         let currentNode = placeholder;
 
+        const ctxSnapshot = captureContext();
+
         effect(() => {
-            let val;
-            try {
-                val = child();
-                if (isPromiseLike(val)) throw val;
-            } catch (e) {
-                if (isPromiseLike(e)) throw e;
-                reportErrorSafe(e, { phase: 'child.dynamic' });
-                val = createElement('div', { style: { padding: '16px' } }, 'Error');
-            }
-
-            if (Array.isArray(val)) {
-                if (!(currentNode instanceof Element) || !currentNode._roundArrayWrapper) {
-                    const wrapper = document.createElement('span');
-                    wrapper.style.display = 'contents';
-                    wrapper._roundArrayWrapper = true;
-                    if (currentNode.parentNode) {
-                        currentNode.parentNode.replaceChild(wrapper, currentNode);
-                        currentNode = wrapper;
+            runInContext(ctxSnapshot, () => {
+                let val;
+                try {
+                    val = child();
+                    if (isPromiseLike(val)) throw val;
+                } catch (e) {
+                    if (isPromiseLike(e)) {
+                        const suspense = readContext(SuspenseContext);
+                        if (suspense && typeof suspense.register === 'function') {
+                            suspense.register(e);
+                            return;
+                        }
+                        throw new Error("cannot instance a lazy component outside a suspense");
                     }
+                    reportErrorSafe(e, { phase: 'child.dynamic' });
+                    val = createElement('div', { style: { padding: '16px' } }, 'Error');
                 }
 
-                while (currentNode.firstChild) currentNode.removeChild(currentNode.firstChild);
-                val.forEach(v => appendChild(currentNode, v));
-                return;
-            }
+                if (Array.isArray(val)) {
+                    if (!(currentNode instanceof Element) || !currentNode._roundArrayWrapper) {
+                        const wrapper = document.createElement('span');
+                        wrapper.style.display = 'contents';
+                        wrapper._roundArrayWrapper = true;
+                        if (currentNode.parentNode) {
+                            currentNode.parentNode.replaceChild(wrapper, currentNode);
+                            currentNode = wrapper;
+                        }
+                    }
 
-            if (val instanceof Node) {
-                if (currentNode !== val) {
-                    if (currentNode.parentNode) {
-                        currentNode.parentNode.replaceChild(val, currentNode);
-                        currentNode = val;
+                    while (currentNode.firstChild) currentNode.removeChild(currentNode.firstChild);
+                    val.forEach(v => appendChild(currentNode, v));
+                    return;
+                }
+
+                if (val instanceof Node) {
+                    if (currentNode !== val) {
+                        if (currentNode.parentNode) {
+                            currentNode.parentNode.replaceChild(val, currentNode);
+                            currentNode = val;
+                        }
                     }
                 }
-            }
-            else {
-                const textContent = (val === null || val === undefined) ? '' : val;
+                else {
+                    const textContent = (val === null || val === undefined) ? '' : val;
 
-                if (currentNode instanceof Element) {
-                    const newText = document.createTextNode(textContent);
-                    if (currentNode.parentNode) {
-                        currentNode.parentNode.replaceChild(newText, currentNode);
-                        currentNode = newText;
+                    if (currentNode instanceof Element) {
+                        const newText = document.createTextNode(textContent);
+                        if (currentNode.parentNode) {
+                            currentNode.parentNode.replaceChild(newText, currentNode);
+                            currentNode = newText;
+                        }
+                    } else {
+                        currentNode.textContent = textContent;
                     }
-                } else {
-                    currentNode.textContent = textContent;
                 }
-            }
+            });
         }, { onLoad: false });
         return;
     }

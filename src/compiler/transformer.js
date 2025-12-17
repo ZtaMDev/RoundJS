@@ -12,11 +12,70 @@ export function transform(code) {
         let startBlockIndex = -1;
         let endBlockIndex = -1;
 
+        let inSingle = false;
+        let inDouble = false;
+        let inTemplate = false;
+        let inCommentLine = false;
+        let inCommentMulti = false;
+
         for (let i = startIndex; i < str.length; i++) {
-            if (str[i] === '{') {
+            const ch = str[i];
+            const prev = i > 0 ? str[i - 1] : '';
+            const next = i < str.length - 1 ? str[i + 1] : '';
+
+            // Handle strings and comments
+            if (inCommentLine) {
+                if (ch === '\n' || ch === '\r') inCommentLine = false;
+                continue;
+            }
+            if (inCommentMulti) {
+                if (ch === '*' && next === '/') {
+                    inCommentMulti = false;
+                    i++;
+                }
+                continue;
+            }
+            if (inTemplate) {
+                if (ch === '`' && prev !== '\\') inTemplate = false;
+                continue;
+            }
+            if (inSingle) {
+                if (ch === '\'' && prev !== '\\') inSingle = false;
+                continue;
+            }
+            if (inDouble) {
+                if (ch === '"' && prev !== '\\') inDouble = false;
+                continue;
+            }
+
+            // Check for start of strings/comments
+            if (ch === '/' && next === '/') {
+                inCommentLine = true;
+                i++;
+                continue;
+            }
+            if (ch === '/' && next === '*') {
+                inCommentMulti = true;
+                i++;
+                continue;
+            }
+            if (ch === '`') {
+                inTemplate = true;
+                continue;
+            }
+            if (ch === '\'') {
+                inSingle = true;
+                continue;
+            }
+            if (ch === '"') {
+                inDouble = true;
+                continue;
+            }
+
+            if (ch === '{') {
                 if (open === 0) startBlockIndex = i;
                 open++;
-            } else if (str[i] === '}') {
+            } else if (ch === '}') {
                 open--;
                 if (open === 0) {
                     endBlockIndex = i;

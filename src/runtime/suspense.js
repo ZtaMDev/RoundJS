@@ -1,9 +1,13 @@
 import { signal } from './signals.js';
 import { createElement, Fragment } from './dom.js';
+import { createContext } from './context.js';
 
 function isPromiseLike(v) {
     return v && (typeof v === 'object' || typeof v === 'function') && typeof v.then === 'function';
 }
+
+const SuspenseContext = createContext(null);
+export { SuspenseContext };
 
 export function lazy(loader) {
     if (typeof loader !== 'function') {
@@ -67,37 +71,55 @@ export function lazy(loader) {
 
 export function Suspense(props = {}) {
     const tick = signal(0);
-    let lastPromise = null;
+    const pending = new Set();
+
+    // Track promises we are currently waiting for to avoid re-adding them or flickering
+    const waiting = new Set();
 
     const child = Array.isArray(props.children) ? props.children[0] : props.children;
     const childFn = typeof child === 'function' ? child : () => child;
 
-    return createElement('span', { style: { display: 'contents' } }, () => {
+    const register = (promise) => {
+        if (!waiting.has(promise)) {
+            waiting.add(promise);
+            pending.add(promise);
+            promise.then(
+                () => {
+                    waiting.delete(promise);
+                    pending.delete(promise);
+                    tick(tick.peek() + 1);
+                },
+                () => {
+                    waiting.delete(promise);
+                    pending.delete(promise);
+                    tick(tick.peek() + 1);
+                }
+            );
+        }
+    };
+
+    return createElement(SuspenseContext.Provider, {
+        value: { register }
+    }, () => {
+        // Read tick to re-render when promises resolve
         tick();
+
+        // If pending promises, show fallback depending on strategy.
+
+        if (pending.size > 0) {
+            return props.fallback ?? null;
+        }
 
         try {
             const res = childFn();
             if (isPromiseLike(res)) {
-                if (lastPromise !== res) {
-                    lastPromise = res;
-                    res.then(
-                        () => tick(tick.peek() + 1),
-                        () => tick(tick.peek() + 1)
-                    );
-                }
+                register(res);
                 return props.fallback ?? null;
             }
-            lastPromise = null;
             return res ?? null;
         } catch (e) {
             if (isPromiseLike(e)) {
-                if (lastPromise !== e) {
-                    lastPromise = e;
-                    e.then(
-                        () => tick(tick.peek() + 1),
-                        () => tick(tick.peek() + 1)
-                    );
-                }
+                register(e);
                 return props.fallback ?? null;
             }
             throw e;
