@@ -12,7 +12,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v4
 
     - name: Setup Bun
       uses: oven-sh/setup-bun@v1
@@ -38,7 +38,7 @@ jobs:
       run: bun run bench:runtime
 
     - name: Upload Report
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: benchmark-report
         path: benchmarks/reports/build-bench.json
