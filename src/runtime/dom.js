@@ -29,6 +29,13 @@ function warnSignalDirectUsage(fn, kind) {
     }
 }
 
+/**
+ * Create a DOM element or instance a component.
+ * @param {string | Function} tag HTML tag name or Component function.
+ * @param {object} [props] Element attributes or component props.
+ * @param {...any} children Child nodes.
+ * @returns {Node} The resulting DOM node.
+ */
 export function createElement(tag, props = {}, ...children) {
     if (typeof tag === 'function') {
         const componentInstance = createComponentInstance();
@@ -388,6 +395,9 @@ function appendChild(parent, child) {
     }
 }
 
+/**
+ * A grouping component that returns its children without a wrapper element.
+ */
 export function Fragment(props) {
     return props.children;
 }

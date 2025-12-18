@@ -5,6 +5,13 @@ function hasWindow() {
     return typeof window !== 'undefined' && typeof document !== 'undefined';
 }
 
+/**
+ * Create a shared global state store with actions and optional persistence.
+ * @template T
+ * @param {T} [initialState={}] Initial state object.
+ * @param {Record<string, (state: T, ...args: any[]) => any>} [actions] Action reducers.
+ * @returns {RoundStore<T>} The store object.
+ */
 export function createStore(initialState = {}, actions = null) {
     const state = (initialState && typeof initialState === 'object') ? initialState : {};
     const signals = Object.create(null);

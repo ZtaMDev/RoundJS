@@ -16,7 +16,7 @@
 npm install round-core
 ```
 
-Instead of a Virtual DOM diff, Round updates the UI by subscribing DOM updates directly to reactive primitives (**signals**). This keeps rendering predictable, small, and fast for interactive apps.
+Instead of a Virtual DOM diff, Round updates the UI by subscribing DOM updates directly to reactive primitives (**signals**) and **bindables**. This keeps rendering predictable, small, and fast for interactive apps.
 
 ## What Round is focused on
 
@@ -93,7 +93,7 @@ This scaffolds a minimal Round app with `src/app.round` and an example `src/coun
 
 ## `.round` files
 
-A `.round` file is a JSX-based component module (ESM) compiled by the Round toolchain.
+A `.round` file is a JSX-based component module (ESM) compiled by the Round toolchain. you can also use .jsx files but you wont get the round JSX superset features like conditional rendering and other features.
 
 Example `src/app.round`:
 

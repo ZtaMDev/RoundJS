@@ -127,6 +127,11 @@ function mountAutoNotFound() {
     root.appendChild(view);
 }
 
+/**
+ * Navigate to a different path programmatically.
+ * @param {string} to The destination URL or path.
+ * @param {object} [options] Navigation options (e.g., { replace: true }).
+ */
 export function navigate(to, options = {}) {
     if (!hasWindow) return;
     ensureListener();
@@ -264,6 +269,15 @@ export function setNotFound(Component) {
     defaultNotFoundComponent = Component;
 }
 
+/**
+ * Define a route that renders its children when the path matches.
+ * @param {object} props Route properties.
+ * @param {string} [props.route='/'] The path to match.
+ * @param {boolean} [props.exact] Whether to use exact matching.
+ * @param {string} [props.title] Page title to set when active.
+ * @param {string} [props.description] Meta description to set when active.
+ * @param {any} [props.children] Content to render.
+ */
 export function Route(props = {}) {
     ensureListener();
 
@@ -319,6 +333,10 @@ export function Route(props = {}) {
     });
 }
 
+/**
+ * An alias for Route, typically used for top-level pages.
+ * @param {object} props Page properties (same as Route).
+ */
 export function Page(props = {}) {
     ensureListener();
 
@@ -371,6 +389,9 @@ export function Page(props = {}) {
     });
 }
 
+/**
+ * Define a fallback component or content for when no routes match.
+ */
 export function NotFound(props = {}) {
     ensureListener();
 
@@ -402,6 +423,13 @@ export function NotFound(props = {}) {
     });
 }
 
+/**
+ * A standard link component that performs SPA navigation.
+ * @param {object} props Link properties.
+ * @param {string} [props.href] The destination path.
+ * @param {boolean} [props.spa=true] Use SPA navigation (prevents reload).
+ * @param {any} [props.children] Link content.
+ */
 export function Link(props = {}) {
     ensureListener();
 

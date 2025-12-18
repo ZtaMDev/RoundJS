@@ -11,6 +11,12 @@ function popContext() {
     contextStack.pop();
 }
 
+/**
+ * Read the current value of a context from the tree.
+ * @template T
+ * @param {Context<T>} ctx The context object.
+ * @returns {T} The current context value.
+ */
 export function readContext(ctx) {
     for (let i = contextStack.length - 1; i >= 0; i--) {
         const layer = contextStack[i];
@@ -21,6 +27,12 @@ export function readContext(ctx) {
     return ctx.defaultValue;
 }
 
+/**
+ * Create a new Context object for sharing state between components.
+ * @template T
+ * @param {T} [defaultValue] The value used when no provider is found.
+ * @returns {Context<T>} The context object with a `Provider` component.
+ */
 export function createContext(defaultValue) {
     const ctx = {
         id: nextContextId++,

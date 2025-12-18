@@ -12,6 +12,13 @@ function subscribe(running, subscriptions) {
     running.dependencies.add(subscriptions);
 }
 
+/**
+ * Run a function without tracking any signals it reads.
+ * Any signals accessed inside `fn` will not become dependencies of the current effect.
+ * @template T
+ * @param {() => T} fn The function to execute.
+ * @returns {T} The return value of `fn`.
+ */
 export function untrack(fn) {
     context.push(null);
     try {
@@ -21,6 +28,13 @@ export function untrack(fn) {
     }
 }
 
+/**
+ * Create a reactive side-effect that runs whenever its signal dependencies change.
+ * @param {(() => any) | any[]} arg1 Either the callback function or an array of explicit dependencies.
+ * @param {(() => any)} [arg2] The callback function if the first argument was explicit dependencies.
+ * @param {object} [arg3] Optional configuration (e.g., { onLoad: false }).
+ * @returns {() => void} A function to stop and cleanup the effect.
+ */
 export function effect(arg1, arg2, arg3) {
     let callback;
     let explicitDeps = null;
@@ -241,6 +255,12 @@ function attachHelpers(s) {
     return s;
 }
 
+/**
+ * Create a reactive signal.
+ * @template T
+ * @param {T} [initialValue] The starting value.
+ * @returns {RoundSignal<T>} A signal function that reads/writes the value.
+ */
 export function signal(initialValue) {
     let value = initialValue;
     const subscriptions = new Set();
@@ -285,6 +305,12 @@ export function signal(initialValue) {
     return attachHelpers(signal);
 }
 
+/**
+ * Create a bindable signal intended for two-way DOM bindings.
+ * @template T
+ * @param {T} [initialValue] The starting value.
+ * @returns {RoundSignal<T>} A signal function marked as bindable.
+ */
 export function bindable(initialValue) {
     const s = signal(initialValue);
     try {
@@ -345,6 +371,12 @@ function parsePath(path) {
     return [String(path)];
 }
 
+/**
+ * Create a read/write view of a specific path within a signal object.
+ * @param {RoundSignal<any>} root The source signal.
+ * @param {string | string[]} path The property path (e.g., 'user.profile.name' or ['user', 'profile', 'name']).
+ * @returns {RoundSignal<any>} A signal-like view of the path.
+ */
 export function pick(root, path) {
     if (!isSignalLike(root)) {
         throw new Error('[round] pick(root, path) expects root to be a signal (use bindable.object(...) or signal({...})).');
@@ -499,6 +531,12 @@ bindable.object = function (initialObject = {}) {
     return createBindableObjectProxy(root, []);
 };
 
+/**
+ * Create a read-only computed signal derived from other signals.
+ * @template T
+ * @param {() => T} fn A function that computes the value.
+ * @returns {(() => T)} A function that returns the derived value.
+ */
 export function derive(fn) {
     const derived = signal();
 
