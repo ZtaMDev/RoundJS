@@ -1,0 +1,20 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "Round Inject",
+  "scopeName": "source.round.injection",
+  "injectionSelector": "L:source.js.jsx",
+  "patterns": [
+    {
+      "name": "keyword.control.round",
+      "match": "\\b(if|else|for|in)\\b"
+    },
+    {
+      "name": "entity.other.attribute-name.round",
+      "match": "\\bbind:[A-Za-z_$][\\w$]*\\b"
+    },
+    {
+      "name": "entity.name.type.round",
+      "match": "\\b(Route|Suspense|Markdown|ErrorBoundary|Fragment|Page|Link|NotFound)\\b"
+    }
+  ]
+}

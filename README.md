@@ -12,6 +12,11 @@
   <em>Round is a lightweight frontend framework focused on building <b>single-page applications (SPAs)</b> with <b>fine‑grained reactivity.</b></em>
 </p>
 
+<div align="center">
+Extension for VSCode [here](https://marketplace.visualstudio.com/items?itemName=ZtaMDev.round) and OpenVSX version [here](https://open-vsx.org/extension/ztamdev/round)
+</div>
+
+
 ```bash
 npm install round-core
 ```

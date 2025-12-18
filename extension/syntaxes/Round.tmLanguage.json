@@ -1,0 +1,290 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "Round",
+  "scopeName": "source.round",
+  "patterns": [
+    {
+      "include": "#bind-attribute"
+    },
+    {
+      "include": "#control-flow"
+    },
+    {
+      "include": "#core-components"
+    },
+    {
+      "include": "source.js.jsx"
+    }
+  ],
+  "repository": {
+    "bind-attribute": {
+      "name": "entity.other.attribute-name.round.bind",
+      "match": "\\bbind:[A-Za-z_$][\\w$]*\\b"
+    },
+    "core-components": {
+      "name": "entity.name.type.round",
+      "match": "\\b(Route|Suspense|Markdown|ErrorBoundary|Fragment|Page|Link|NotFound)\\b"
+    },
+    "control-flow": {
+      "patterns": [
+        {
+          "include": "#if-block"
+        },
+        {
+          "include": "#for-block"
+        }
+      ]
+    },
+    "if-block": {
+      "name": "meta.round.controlflow.if",
+      "begin": "(\\{)\\s*(if)",
+      "beginCaptures": {
+        "1": {
+          "name": "punctuation.section.embedded.begin.round"
+        },
+        "2": {
+          "name": "keyword.control.round"
+        }
+      },
+      "end": "(\\})\\s*(\\})",
+      "endCaptures": {
+        "1": {
+          "name": "punctuation.section.block.end.round"
+        },
+        "2": {
+          "name": "punctuation.section.embedded.end.round"
+        }
+      },
+      "patterns": [
+        {
+          "include": "#condition-header"
+        },
+        {
+          "include": "#elseif-branch"
+        },
+        {
+          "include": "#else-branch"
+        },
+        {
+          "include": "#control-flow"
+        },
+        {
+          "include": "#round-jsx"
+        },
+        {
+          "include": "source.js.jsx"
+        }
+      ]
+    },
+    "for-block": {
+      "name": "meta.round.controlflow.for",
+      "begin": "(\\{)\\s*(for)",
+      "beginCaptures": {
+        "1": {
+          "name": "punctuation.section.embedded.begin.round"
+        },
+        "2": {
+          "name": "keyword.control.round"
+        }
+      },
+      "end": "(\\})\\s*(\\})",
+      "endCaptures": {
+        "1": {
+          "name": "punctuation.section.block.end.round"
+        },
+        "2": {
+          "name": "punctuation.section.embedded.end.round"
+        }
+      },
+      "patterns": [
+        {
+          "begin": "(\\()",
+          "beginCaptures": {
+            "1": {
+              "name": "punctuation.definition.parameters.begin.round"
+            }
+          },
+          "end": "(\\))\\s*(\\{)",
+          "endCaptures": {
+            "1": {
+              "name": "punctuation.definition.parameters.end.round"
+            },
+            "2": {
+              "name": "punctuation.section.block.begin.round"
+            }
+          },
+          "patterns": [
+            {
+              "match": "\\b(in|of)\\b",
+              "name": "keyword.control.round"
+            },
+            {
+              "include": "source.js.jsx"
+            }
+          ]
+        },
+        {
+          "include": "#control-flow"
+        },
+        {
+          "include": "#round-jsx"
+        },
+        {
+          "include": "source.js.jsx"
+        }
+      ]
+    },
+    "condition-header": {
+      "begin": "(\\()",
+      "beginCaptures": {
+        "1": {
+          "name": "punctuation.definition.parameters.begin.round"
+        }
+      },
+      "end": "(\\))\\s*(\\{)",
+      "endCaptures": {
+        "1": {
+          "name": "punctuation.definition.parameters.end.round"
+        },
+        "2": {
+          "name": "punctuation.section.block.begin.round"
+        }
+      },
+      "patterns": [
+        {
+          "include": "source.js.jsx"
+        }
+      ]
+    },
+    "elseif-branch": {
+      "name": "meta.round.controlflow.elseif",
+      "begin": "(\\})\\s*(else\\s+if)",
+      "beginCaptures": {
+        "1": {
+          "name": "punctuation.section.block.end.round"
+        },
+        "2": {
+          "name": "keyword.control.round"
+        }
+      },
+      "end": "(\\{)",
+      "endCaptures": {
+        "1": {
+          "name": "punctuation.section.block.begin.round"
+        }
+      },
+      "patterns": [
+        {
+          "begin": "(\\()",
+          "beginCaptures": {
+            "1": {
+              "name": "punctuation.definition.parameters.begin.round"
+            }
+          },
+          "end": "(\\))",
+          "endCaptures": {
+            "1": {
+              "name": "punctuation.definition.parameters.end.round"
+            }
+          },
+          "patterns": [
+            {
+              "include": "source.js.jsx"
+            }
+          ]
+        }
+      ]
+    },
+    "else-branch": {
+      "name": "meta.round.controlflow.else",
+      "match": "(\\})\\s*(else)\\s*(\\{)",
+      "captures": {
+        "1": {
+          "name": "punctuation.section.block.end.round"
+        },
+        "2": {
+          "name": "keyword.control.round"
+        },
+        "3": {
+          "name": "punctuation.section.block.begin.round"
+        }
+      }
+    },
+    "round-jsx": {
+      "patterns": [
+        {
+          "name": "meta.tag.jsx",
+          "begin": "(<)(/)?([A-Za-z_$][\\w$\\.-]*)",
+          "beginCaptures": {
+            "1": {
+              "name": "punctuation.definition.tag.begin.jsx"
+            },
+            "2": {
+              "name": "punctuation.definition.tag.begin.jsx"
+            },
+            "3": {
+              "name": "entity.name.tag.jsx"
+            }
+          },
+          "end": "(/?>)",
+          "endCaptures": {
+            "1": {
+              "name": "punctuation.definition.tag.end.jsx"
+            }
+          },
+          "patterns": [
+            {
+              "include": "#bind-attribute"
+            },
+            {
+              "name": "entity.other.attribute-name.jsx",
+              "match": "\\b[A-Za-z_$][\\w$:-]*\\b(?=\\s*=)"
+            },
+            {
+              "name": "keyword.operator.assignment.jsx",
+              "match": "="
+            },
+            {
+              "name": "string.quoted.double.jsx",
+              "begin": "\"",
+              "end": "\""
+            },
+            {
+              "name": "string.quoted.single.jsx",
+              "begin": "'",
+              "end": "'"
+            },
+            {
+              "name": "meta.embedded.expression.js",
+              "begin": "\\{",
+              "end": "\\}",
+              "patterns": [
+                {
+                  "include": "#control-flow"
+                },
+                {
+                  "include": "source.js.jsx"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "meta.tag.jsx",
+          "match": "(</)([A-Za-z_$][\\w$\\.-]*)(\\s*)(>)",
+          "captures": {
+            "1": {
+              "name": "punctuation.definition.tag.begin.jsx"
+            },
+            "2": {
+              "name": "entity.name.tag.jsx"
+            },
+            "4": {
+              "name": "punctuation.definition.tag.end.jsx"
+            }
+          }
+        }
+      ]
+    }
+  }
+}

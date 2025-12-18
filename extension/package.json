@@ -1,0 +1,128 @@
+{
+  "name": "round",
+  "displayName": "Round",
+  "description": "Language support for .round (Round framework)",
+  "version": "0.1.0",
+  "main": "./extension.js",
+  "publisher": "ZtaMDev",
+  "icon": "Round.png",
+  "author": {
+    "name": "ZtaMDev",
+    "url": "https://github.com/ZtaMDev"
+  },
+  "license": "MIT",
+  "engines": {
+    "vscode": "^1.90.0"
+  },
+  "activationEvents": [
+    "onLanguage:round",
+    "workspaceContains:**/*.round"
+  ],
+  "categories": [
+    "Programming Languages"
+  ],
+  "contributes": {
+    "configurationDefaults": {
+      "[round]": {
+        "editor.maxTokenizationLineLength": 2500
+      }
+    },
+    "languages": [
+      {
+        "id": "round",
+        "aliases": [
+          "Round",
+          "round"
+        ],
+        "icon": {
+          "light": "./images/round-light.svg",
+          "dark": "./images/round-dark.svg"
+        },
+        "extensions": [
+          ".round"
+        ],
+        "mimetypes": [
+          "text/x-round"
+        ],
+        "configuration": "./javascript-language-configuration.json"
+      },
+      {
+        "id": "jsx-tags",
+        "aliases": [],
+        "configuration": "./tags-language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "round",
+        "scopeName": "source.round",
+        "path": "./syntaxes/Round.tmLanguage.json",
+        "embeddedLanguages": {
+          "meta.tag.js": "jsx-tags",
+          "meta.tag.without-attributes.js": "jsx-tags",
+          "meta.tag.attributes.js.jsx": "round",
+          "meta.embedded.expression.js": "round"
+        },
+        "tokenTypes": {
+          "punctuation.definition.template-expression": "other",
+          "entity.name.type.instance.jsdoc": "other",
+          "entity.name.function.tagged-template": "other",
+          "meta.import string.quoted": "other",
+          "variable.other.jsdoc": "other"
+        }
+      },
+      {
+        "scopeName": "source.js.jsx",
+        "path": "./syntaxes/JavaScriptReact.tmLanguage.json"
+      },
+      {
+        "scopeName": "source.js.regexp",
+        "path": "./syntaxes/Regular Expressions (JavaScript).tmLanguage"
+      }
+    ],
+    "semanticTokenScopes": [
+      {
+        "language": "round",
+        "scopes": {
+          "property": [
+            "variable.other.property.jsx"
+          ],
+          "property.readonly": [
+            "variable.other.constant.property.jsx"
+          ],
+          "variable": [
+            "variable.other.readwrite.jsx"
+          ],
+          "variable.readonly": [
+            "variable.other.constant.object.jsx"
+          ],
+          "function": [
+            "entity.name.function.jsx"
+          ],
+          "namespace": [
+            "entity.name.type.module.jsx"
+          ],
+          "variable.defaultLibrary": [
+            "support.variable.js"
+          ],
+          "function.defaultLibrary": [
+            "support.function.js"
+          ]
+        }
+      }
+    ],
+    "snippets": [
+      {
+        "language": "round",
+        "path": "./snippets/javascript.code-snippets"
+      }
+    ]
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ZtaMDev/RoundJS.git"
+  },
+  "dependencies": {
+    "vscode-languageclient": "^9.0.1"
+  }
+}

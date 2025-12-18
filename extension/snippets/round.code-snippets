@@ -1,0 +1,109 @@
+{
+  "Round component": {
+    "prefix": "round:component",
+    "body": [
+      "export function ${1:ComponentName}() {",
+      "\treturn (",
+      "\t\t<div>",
+      "\t\t\t$0",
+      "\t\t</div>",
+      "\t);",
+      "}"
+    ],
+    "description": "Create a Round component"
+  },
+  "signal": {
+    "prefix": "round:signal",
+    "body": [
+      "import { signal } from 'round-core';",
+      "",
+      "const ${1:name} = signal(${2:initial});",
+      "$0"
+    ],
+    "description": "Create a signal()"
+  },
+  "bindable": {
+    "prefix": "round:bindable",
+    "body": [
+      "import { bindable } from 'round-core';",
+      "",
+      "const ${1:name} = bindable(${2:initial});",
+      "$0"
+    ],
+    "description": "Create a bindable()"
+  },
+  "Route": {
+    "prefix": "round:route",
+    "body": [
+      "import { Route } from 'round-core';",
+      "",
+      "<Route route=\"${1:/}\" title=\"${2:Title}\">",
+      "\t$0",
+      "</Route>"
+    ],
+    "description": "Insert a <Route> block"
+  },
+  "Suspense": {
+    "prefix": "round:suspense",
+    "body": [
+      "import { Suspense } from 'round-core';",
+      "",
+      "<Suspense fallback={<div>${1:Loading...}</div>}>",
+      "\t$0",
+      "</Suspense>"
+    ],
+    "description": "Insert a <Suspense> block"
+  },
+  "Markdown": {
+    "prefix": "round:markdown",
+    "body": [
+      "import { Markdown } from 'round-core';",
+      "",
+      "<Markdown src=\"${1:./README.md}\" />$0"
+    ],
+    "description": "Insert a <Markdown> component"
+  },
+  "Round if": {
+    "prefix": "round:if",
+    "body": [
+      "{if(${1:condition}){",
+      "\t$0",
+      "}}"
+    ],
+    "description": "Round JSX superset if block"
+  },
+  "Round if/else": {
+    "prefix": "round:ifelse",
+    "body": [
+      "{if(${1:condition}){",
+      "\t$0",
+      "} else {",
+      "\t",
+      "}}"
+    ],
+    "description": "Round JSX superset if/else block"
+  },
+  "Round for": {
+    "prefix": "round:for",
+    "body": [
+      "{for(${1:item} in ${2:list}){",
+      "\t$0",
+      "}}"
+    ],
+    "description": "Round JSX superset for-in block"
+  },
+  "bind:value": {
+    "prefix": "round:bind:value",
+    "body": [
+      "<input bind:value={${1:state}} />$0"
+    ],
+    "description": "Two-way bind:value"
+  },
+  "bind:checked": {
+    "prefix": "round:bind:checked",
+    "body": [
+      "<input type=\"checkbox\" bind:checked={${1:state}} />$0"
+    ],
+    "description": "Two-way bind:checked"
+  }
+}

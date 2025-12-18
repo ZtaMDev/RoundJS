@@ -50,15 +50,28 @@ export interface RoundSignal<T> {
     bind?: boolean;
 }
 
+export interface Signal {
+    <T>(initialValue?: T): RoundSignal<T>;
+    object<T extends object>(initialState: T): { [K in keyof T]: RoundSignal<T[K]> };
+}
+
 /**
  * Creates a reactive signal.
  */
-export function signal<T>(initialValue?: T): RoundSignal<T>;
+export const signal: Signal;
 
 /**
  * Creates a bindable signal intended for two-way DOM bindings.
  */
-export function bindable<T>(initialValue?: T): RoundSignal<T>;
+export interface Bindable {
+    <T>(initialValue?: T): RoundSignal<T>;
+    object<T extends object>(initialState: T): { [K in keyof T]: RoundSignal<T[K]> };
+}
+
+/**
+ * Creates a bindable signal intended for two-way DOM bindings.
+ */
+export const bindable: Bindable;
 
 /**
  * Run a function without tracking any signals it reads.
@@ -288,7 +301,9 @@ export function bindContext<T>(ctx: Context<T>): () => T;
  * Mark a component for lazy loading (code-splitting).
  * Expects a function returning a dynamic import promise.
  */
-export function lazy<T>(fn: () => Promise<{ default: T }>): T;
+export function lazy<T>(fn: () => Promise<{ default: T } | T>): any;
+
+declare module "*.round";
 
 export interface SuspenseProps {
     /** Content to show while children (e.g. lazy components) are loading. */
