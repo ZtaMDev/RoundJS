@@ -620,17 +620,21 @@ function createContext(defaultValue) {
     Provider: null
   };
   function Provider(props = {}) {
-    const value = props.value;
-    const child = Array.isArray(props.children) ? props.children[0] : props.children;
-    const childFn = typeof child === "function" ? child : () => child;
-    return createElement("span", { style: { display: "contents" } }, () => {
-      pushContext({ [ctx.id]: value });
-      try {
-        return childFn();
-      } finally {
-        popContext();
-      }
-    });
+    const children = props.children;
+    pushContext({ [ctx.id]: props.value });
+    try {
+      return createElement("span", { style: { display: "contents" } }, () => {
+        const val = typeof props.value === "function" && props.value.peek ? props.value() : props.value;
+        pushContext({ [ctx.id]: val });
+        try {
+          return children;
+        } finally {
+          popContext();
+        }
+      });
+    } finally {
+      popContext();
+    }
   }
   ctx.Provider = Provider;
   return ctx;
@@ -1120,6 +1124,7 @@ const pathEvalReady = signal(true);
 let defaultNotFoundComponent = null;
 let autoNotFoundMounted = false;
 let userProvidedNotFound = false;
+const RoutingContext = createContext("");
 function ensureListener() {
   if (!hasWindow$1 || listenerInitialized) return;
   listenerInitialized = true;
@@ -1163,12 +1168,14 @@ function useRouteReady() {
 }
 function getIsNotFound() {
   const pathname = normalizePathname(currentPath());
+  if (pathname === "/") return false;
   if (!(Boolean(pathEvalReady()) && lastPathEvaluated === pathname)) return false;
   return !Boolean(pathHasMatch());
 }
 function useIsNotFound() {
   return () => {
     const pathname = normalizePathname(currentPath());
+    if (pathname === "/") return false;
     if (!(Boolean(pathEvalReady()) && lastPathEvaluated === pathname)) return false;
     return !Boolean(pathHasMatch());
   };
@@ -1188,6 +1195,7 @@ function mountAutoNotFound() {
     if (!ready) return null;
     if (lastPathEvaluated !== pathname) return null;
     if (hasMatch) return null;
+    if (pathname === "/") return null;
     const Comp = defaultNotFoundComponent;
     if (typeof Comp === "function") {
       return createElement(Comp, { pathname });
@@ -1294,10 +1302,11 @@ function normalizeTo(to) {
   if (!path.startsWith("/")) return String(to ?? "");
   return normalizePathname(path) + suffix;
 }
-function matchRoute(route, pathname) {
+function matchRoute(route, pathname, exact = true) {
   const r = normalizePathname(route);
   const p = normalizePathname(pathname);
-  return r === p;
+  if (exact) return r === p;
+  return p === r || p.startsWith(r.endsWith("/") ? r : r + "/");
 }
 function beginPathEvaluation(pathname) {
   if (pathname !== lastPathEvaluated) {
@@ -1316,11 +1325,31 @@ function setNotFound(Component) {
 function Route(props = {}) {
   ensureListener();
   return createElement("span", { style: { display: "contents" } }, () => {
+    const parentPath = readContext(RoutingContext) || "";
     const pathname = normalizePathname(currentPath());
     beginPathEvaluation(pathname);
-    const route = props.route ?? "/";
-    if (!matchRoute(route, pathname)) return null;
-    pathHasMatch(true);
+    const routeProp = props.route ?? "/";
+    if (typeof routeProp === "string" && !routeProp.startsWith("/")) {
+      throw new Error(`Invalid route: "${routeProp}". All routes must start with a forward slash "/". (Nested under: "${parentPath || "root"}")`);
+    }
+    let fullRoute = "";
+    if (parentPath && parentPath !== "/") {
+      const cleanParent = parentPath.endsWith("/") ? parentPath.slice(0, -1) : parentPath;
+      const cleanChild = routeProp.startsWith("/") ? routeProp : "/" + routeProp;
+      if (cleanChild.startsWith(cleanParent + "/") || cleanChild === cleanParent) {
+        fullRoute = normalizePathname(cleanChild);
+      } else {
+        fullRoute = normalizePathname(cleanParent + cleanChild);
+      }
+    } else {
+      fullRoute = normalizePathname(routeProp);
+    }
+    const isRoot = fullRoute === "/";
+    const exact = props.exact !== void 0 ? Boolean(props.exact) : isRoot;
+    if (!matchRoute(fullRoute, pathname, exact)) return null;
+    if (matchRoute(fullRoute, pathname, true)) {
+      pathHasMatch(true);
+    }
     const mergedHead = props.head && typeof props.head === "object" ? props.head : {};
     const meta = props.description ? [{ name: "description", content: String(props.description) }].concat(mergedHead.meta ?? props.meta ?? []) : mergedHead.meta ?? props.meta;
     const links = mergedHead.links ?? props.links;
@@ -1328,17 +1357,37 @@ function Route(props = {}) {
     const icon = mergedHead.icon ?? props.icon;
     const favicon = mergedHead.favicon ?? props.favicon;
     applyHead({ title, meta, links, icon, favicon });
-    return props.children;
+    return createElement(RoutingContext.Provider, { value: fullRoute }, props.children);
   });
 }
 function Page(props = {}) {
   ensureListener();
   return createElement("span", { style: { display: "contents" } }, () => {
+    const parentPath = readContext(RoutingContext) || "";
     const pathname = normalizePathname(currentPath());
     beginPathEvaluation(pathname);
-    const route = props.route ?? "/";
-    if (!matchRoute(route, pathname)) return null;
-    pathHasMatch(true);
+    const routeProp = props.route ?? "/";
+    if (typeof routeProp === "string" && !routeProp.startsWith("/")) {
+      throw new Error(`Invalid route: "${routeProp}". All routes must start with a forward slash "/". (Nested under: "${parentPath || "root"}")`);
+    }
+    let fullRoute = "";
+    if (parentPath && parentPath !== "/") {
+      const cleanParent = parentPath.endsWith("/") ? parentPath.slice(0, -1) : parentPath;
+      const cleanChild = routeProp.startsWith("/") ? routeProp : "/" + routeProp;
+      if (cleanChild.startsWith(cleanParent + "/") || cleanChild === cleanParent) {
+        fullRoute = normalizePathname(cleanChild);
+      } else {
+        fullRoute = normalizePathname(cleanParent + cleanChild);
+      }
+    } else {
+      fullRoute = normalizePathname(routeProp);
+    }
+    const isRoot = fullRoute === "/";
+    const exact = props.exact !== void 0 ? Boolean(props.exact) : isRoot;
+    if (!matchRoute(fullRoute, pathname, exact)) return null;
+    if (matchRoute(fullRoute, pathname, true)) {
+      pathHasMatch(true);
+    }
     const mergedHead = props.head && typeof props.head === "object" ? props.head : {};
     const meta = props.description ? [{ name: "description", content: String(props.description) }].concat(mergedHead.meta ?? props.meta ?? []) : mergedHead.meta ?? props.meta;
     const links = mergedHead.links ?? props.links;
@@ -1346,7 +1395,7 @@ function Page(props = {}) {
     const icon = mergedHead.icon ?? props.icon;
     const favicon = mergedHead.favicon ?? props.favicon;
     applyHead({ title, meta, links, icon, favicon });
-    return props.children;
+    return createElement(RoutingContext.Provider, { value: fullRoute }, props.children);
   });
 }
 function NotFound(props = {}) {
@@ -1360,6 +1409,7 @@ function NotFound(props = {}) {
     if (!ready) return null;
     if (lastPathEvaluated !== pathname) return null;
     if (hasMatch) return null;
+    if (pathname === "/") return null;
     const Comp = props.component ?? defaultNotFoundComponent;
     if (typeof Comp === "function") {
       return createElement(Comp, { pathname });

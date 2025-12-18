@@ -122,31 +122,6 @@ function resolveFrom(baseDir, p) {
   if (path.isAbsolute(p)) return p;
   return path.resolve(baseDir, p);
 }
-function ensureIndexHtml(rootDir, entryRel, title = "Round") {
-  const indexPath = path.join(rootDir, "index.html");
-  if (fs.existsSync(indexPath)) return;
-  const entryPath = entryRel.startsWith("/") ? entryRel : `/${entryRel}`;
-  fs.writeFileSync(indexPath, [
-    "<!DOCTYPE html>",
-    '<html lang="en">',
-    "<head>",
-    '    <meta charset="UTF-8" />',
-    '    <meta name="viewport" content="width=device-width, initial-scale=1.0" />',
-    `    <title>${title}</title>`,
-    "</head>",
-    "<body>",
-    '    <div id="app"></div>',
-    '    <script type="module">',
-    "        import { render } from 'round-core';",
-    `        import App from '${entryPath}';`,
-    "",
-    '        render(App, document.getElementById("app"));',
-    "    <\/script>",
-    "</body>",
-    "</html>",
-    ""
-  ].join("\n"), "utf8");
-}
 function parseArgs(argv) {
   const args = { _: [] };
   for (let i = 0; i < argv.length; i++) {
@@ -224,7 +199,6 @@ Usage:
   const pkgPath = path.join(projectDir, "package.json");
   const configPath = path.join(projectDir, "round.config.json");
   const viteConfigPath = path.join(projectDir, "vite.config.js");
-  const indexHtmlPath = path.join(projectDir, "index.html");
   const appRoundPath = path.join(srcDir, "app.round");
   const counterRoundPath = path.join(srcDir, "counter.round");
   writeFileIfMissing(pkgPath, JSON.stringify({
@@ -277,26 +251,6 @@ Usage:
     "        port: 5173",
     "    }",
     "});",
-    ""
-  ].join("\n"));
-  writeFileIfMissing(indexHtmlPath, [
-    "<!DOCTYPE html>",
-    '<html lang="en">',
-    "<head>",
-    '    <meta charset="UTF-8" />',
-    '    <meta name="viewport" content="width=device-width, initial-scale=1.0" />',
-    `    <title>${name}</title>`,
-    "</head>",
-    "<body>",
-    '    <div id="app"></div>',
-    '    <script type="module">',
-    "        import { render } from 'round-core';",
-    "        import App from '/src/app.round';",
-    "",
-    "        render(App, document.getElementById('app'));",
-    "    <\/script>",
-    "</body>",
-    "</html>",
     ""
   ].join("\n"));
   writeFileIfMissing(appRoundPath, [
@@ -376,8 +330,7 @@ async function runDev({ rootDir, configPathAbs, config }) {
   if (!entryAbs || !fs.existsSync(entryAbs)) {
     throw new Error(`Entry not found: ${entryAbs ?? "(missing entry)"} (config: ${configPathAbs})`);
   }
-  const entryRel = normalizePath(path.relative(rootDir, entryAbs));
-  ensureIndexHtml(rootDir, entryRel, config?.name ?? "Round");
+  normalizePath(path.relative(rootDir, entryAbs));
   let viteServer = null;
   let restarting = false;
   let restartTimer = null;
@@ -387,8 +340,7 @@ async function runDev({ rootDir, configPathAbs, config }) {
     if (!entryAbs2 || !fs.existsSync(entryAbs2)) {
       throw new Error(`Entry not found: ${entryAbs2 ?? "(missing entry)"} (config: ${configPathAbs})`);
     }
-    const entryRel2 = normalizePath(path.relative(rootDir, entryAbs2));
-    ensureIndexHtml(rootDir, entryRel2, nextConfig?.name ?? "Round");
+    normalizePath(path.relative(rootDir, entryAbs2));
     const serverPort2 = coerceNumber(nextConfig?.dev?.port, 5173);
     const open2 = Boolean(nextConfig?.dev?.open);
     const base2 = nextConfig?.routing?.base ?? "/";
@@ -458,8 +410,7 @@ async function runBuild({ rootDir, configPathAbs, config }) {
   if (!entryAbs || !fs.existsSync(entryAbs)) {
     throw new Error(`Entry not found: ${entryAbs ?? "(missing entry)"} (config: ${configPathAbs})`);
   }
-  const entryRel = normalizePath(path.relative(rootDir, entryAbs));
-  ensureIndexHtml(rootDir, entryRel, config?.name ?? "Round");
+  normalizePath(path.relative(rootDir, entryAbs));
   const outDir = config?.output ? resolveFrom(configDir, config.output) : resolveFrom(rootDir, "./dist");
   const base = config?.routing?.base ?? "/";
   banner();
@@ -497,10 +448,7 @@ async function runPreview({ rootDir, configPathAbs, config }) {
   const base = config?.routing?.base ?? "/";
   const previewPort = coerceNumber(config?.dev?.port, 5173);
   const entryAbs = config?.entry ? resolveFrom(configDir, config.entry) : null;
-  if (entryAbs && fs.existsSync(entryAbs)) {
-    const entryRel = normalizePath(path.relative(rootDir, entryAbs));
-    ensureIndexHtml(rootDir, entryRel, config?.name ?? "Round");
-  }
+  if (entryAbs && fs.existsSync(entryAbs)) ;
   banner();
   process.stdout.write(`${c("Config:", "cyan")} ${configPathAbs}
 `);

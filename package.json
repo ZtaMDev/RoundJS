@@ -1,6 +1,6 @@
 {
     "name": "round-core",
-    "version": "0.0.4",
+    "version": "0.0.5",
     "description": "A lightweight frontend framework for SPA with signals and fine grained reactivity",
     "main": "./dist/index.js",
     "exports": {
@@ -34,13 +34,12 @@
     "license": "MIT",
     "dependencies": {
         "marked": "^12.0.2",
-        "vite": "^5.0.0",
-        "vitest": "^1.6.0"
+        "vite": "^5.0.0"
     },
     "devDependencies": {
-        "jsdom": "^24.0.0",
         "bun-types": "latest",
-        "@types/node": "latest"
+        "@types/node": "latest",
+        "vitest": "^1.6.0"
     },
     "peerDependencies": {
         "bun": ">=1.0.0"

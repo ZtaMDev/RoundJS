@@ -1,5 +1,6 @@
 import { signal, effect } from './signals.js';
 import { createElement } from './dom.js';
+import { createContext, readContext } from './context.js';
 
 const hasWindow = typeof window !== 'undefined' && typeof document !== 'undefined';
 
@@ -19,6 +20,8 @@ const pathEvalReady = signal(true);
 let defaultNotFoundComponent = null;
 let autoNotFoundMounted = false;
 let userProvidedNotFound = false;
+
+const RoutingContext = createContext('');
 
 function ensureListener() {
     if (!hasWindow || listenerInitialized) return;
@@ -72,6 +75,7 @@ export function useRouteReady() {
 
 export function getIsNotFound() {
     const pathname = normalizePathname(currentPath());
+    if (pathname === '/') return false;
     if (!(Boolean(pathEvalReady()) && lastPathEvaluated === pathname)) return false;
     return !Boolean(pathHasMatch());
 }
@@ -79,6 +83,7 @@ export function getIsNotFound() {
 export function useIsNotFound() {
     return () => {
         const pathname = normalizePathname(currentPath());
+        if (pathname === '/') return false;
         if (!(Boolean(pathEvalReady()) && lastPathEvaluated === pathname)) return false;
         return !Boolean(pathHasMatch());
     };
@@ -103,6 +108,10 @@ function mountAutoNotFound() {
         if (!ready) return null;
         if (lastPathEvaluated !== pathname) return null;
         if (hasMatch) return null;
+
+        // Skip absolute 404 overlay for the root path if no match found,
+        // allowing the base app to render its non-routed content.
+        if (pathname === '/') return null;
 
         const Comp = defaultNotFoundComponent;
         if (typeof Comp === 'function') {
@@ -229,10 +238,12 @@ function normalizeTo(to) {
     return normalizePathname(path) + suffix;
 }
 
-function matchRoute(route, pathname) {
+function matchRoute(route, pathname, exact = true) {
     const r = normalizePathname(route);
     const p = normalizePathname(pathname);
-    return r === p;
+    if (exact) return r === p;
+    // Prefix match: either exactly the same, or p starts with r plus a slash
+    return p === r || p.startsWith(r.endsWith('/') ? r : r + '/');
 }
 
 function beginPathEvaluation(pathname) {
@@ -257,13 +268,41 @@ export function Route(props = {}) {
     ensureListener();
 
     return createElement('span', { style: { display: 'contents' } }, () => {
+        const parentPath = readContext(RoutingContext) || '';
         const pathname = normalizePathname(currentPath());
         beginPathEvaluation(pathname);
-        const route = props.route ?? '/';
-        if (!matchRoute(route, pathname)) return null;
 
-        hasMatchForPath = true;
-        pathHasMatch(true);
+        const routeProp = props.route ?? '/';
+        if (typeof routeProp === 'string' && !routeProp.startsWith('/')) {
+            throw new Error(`Invalid route: "${routeProp}". All routes must start with a forward slash "/". (Nested under: "${parentPath || 'root'}")`);
+        }
+
+        let fullRoute = '';
+        if (parentPath && parentPath !== '/') {
+            const cleanParent = parentPath.endsWith('/') ? parentPath.slice(0, -1) : parentPath;
+            const cleanChild = routeProp.startsWith('/') ? routeProp : '/' + routeProp;
+
+            if (cleanChild.startsWith(cleanParent + '/') || cleanChild === cleanParent) {
+                fullRoute = normalizePathname(cleanChild);
+            } else {
+                fullRoute = normalizePathname(cleanParent + cleanChild);
+            }
+        } else {
+            fullRoute = normalizePathname(routeProp);
+        }
+
+        const isRoot = fullRoute === '/';
+        const exact = props.exact !== undefined ? Boolean(props.exact) : isRoot;
+
+        // For nested routing, we match as a prefix so parents stay rendered while children are active
+        if (!matchRoute(fullRoute, pathname, exact)) return null;
+
+        // If it's an exact match of the FULL segments, mark as matched for 404 purposes
+        if (matchRoute(fullRoute, pathname, true)) {
+            hasMatchForPath = true;
+            pathHasMatch(true);
+        }
+
         const mergedHead = (props.head && typeof props.head === 'object') ? props.head : {};
         const meta = props.description
             ? ([{ name: 'description', content: String(props.description) }].concat(mergedHead.meta ?? props.meta ?? []))
@@ -274,7 +313,9 @@ export function Route(props = {}) {
         const favicon = mergedHead.favicon ?? props.favicon;
 
         applyHead({ title, meta, links, icon, favicon });
-        return props.children;
+
+        // Provide the current full path to nested routes
+        return createElement(RoutingContext.Provider, { value: fullRoute }, props.children);
     });
 }
 
@@ -282,13 +323,39 @@ export function Page(props = {}) {
     ensureListener();
 
     return createElement('span', { style: { display: 'contents' } }, () => {
+        const parentPath = readContext(RoutingContext) || '';
         const pathname = normalizePathname(currentPath());
         beginPathEvaluation(pathname);
-        const route = props.route ?? '/';
-        if (!matchRoute(route, pathname)) return null;
 
-        hasMatchForPath = true;
-        pathHasMatch(true);
+        const routeProp = props.route ?? '/';
+        if (typeof routeProp === 'string' && !routeProp.startsWith('/')) {
+            throw new Error(`Invalid route: "${routeProp}". All routes must start with a forward slash "/". (Nested under: "${parentPath || 'root'}")`);
+        }
+
+        let fullRoute = '';
+        if (parentPath && parentPath !== '/') {
+            const cleanParent = parentPath.endsWith('/') ? parentPath.slice(0, -1) : parentPath;
+            const cleanChild = routeProp.startsWith('/') ? routeProp : '/' + routeProp;
+
+            if (cleanChild.startsWith(cleanParent + '/') || cleanChild === cleanParent) {
+                fullRoute = normalizePathname(cleanChild);
+            } else {
+                fullRoute = normalizePathname(cleanParent + cleanChild);
+            }
+        } else {
+            fullRoute = normalizePathname(routeProp);
+        }
+
+        const isRoot = fullRoute === '/';
+        const exact = props.exact !== undefined ? Boolean(props.exact) : isRoot;
+
+        if (!matchRoute(fullRoute, pathname, exact)) return null;
+
+        if (matchRoute(fullRoute, pathname, true)) {
+            hasMatchForPath = true;
+            pathHasMatch(true);
+        }
+
         const mergedHead = (props.head && typeof props.head === 'object') ? props.head : {};
         const meta = props.description
             ? ([{ name: 'description', content: String(props.description) }].concat(mergedHead.meta ?? props.meta ?? []))
@@ -299,7 +366,8 @@ export function Page(props = {}) {
         const favicon = mergedHead.favicon ?? props.favicon;
 
         applyHead({ title, meta, links, icon, favicon });
-        return props.children;
+
+        return createElement(RoutingContext.Provider, { value: fullRoute }, props.children);
     });
 }
 
@@ -318,6 +386,7 @@ export function NotFound(props = {}) {
         if (lastPathEvaluated !== pathname) return null;
 
         if (hasMatch) return null;
+        if (pathname === '/') return null;
 
         const Comp = props.component ?? defaultNotFoundComponent;
         if (typeof Comp === 'function') {
@@ -339,8 +408,8 @@ export function Link(props = {}) {
     const rawHref = props.href ?? props.to ?? '#';
     const href = spaNormalizeHref(rawHref);
 
-     const spa = props.spa !== undefined ? Boolean(props.spa) : true;
-     const reload = Boolean(props.reload);
+    const spa = props.spa !== undefined ? Boolean(props.spa) : true;
+    const reload = Boolean(props.reload);
 
     const onClick = (e) => {
         if (typeof props.onClick === 'function') props.onClick(e);

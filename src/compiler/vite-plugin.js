@@ -93,6 +93,8 @@ export default function RoundPlugin(pluginOptions = {}) {
         configPathAbs: null,
         configDir: null,
         entryAbs: null,
+        entryRel: null,
+        name: 'Round',
         startHead: null,
         startHeadHtml: null
     };
@@ -134,7 +136,10 @@ export default function RoundPlugin(pluginOptions = {}) {
         const customTags = config?.htmlTags;
         state.customTags = Array.isArray(customTags) ? customTags : [];
 
+        state.name = config?.name ?? 'Round';
+
         const entryRel = config?.entry;
+        state.entryRel = entryRel;
         state.entryAbs = entryRel ? resolveMaybeRelative(configDir, entryRel) : null;
 
         const include = pluginOptions.include ?? config?.include ?? [];
@@ -323,7 +328,45 @@ export default function RoundPlugin(pluginOptions = {}) {
             };
         },
 
+        resolveId(id) {
+            if (id === '/index.html' || id === 'index.html') {
+                const fullPath = path.resolve(state.rootDir, 'index.html');
+                if (!fs.existsSync(fullPath)) {
+                    return '/index.html'; // Virtual ID
+                }
+            }
+            return null;
+        },
+
         load(id) {
+            if (id === '/index.html' || id === 'index.html') {
+                const fullPath = path.resolve(state.rootDir, 'index.html');
+                if (fs.existsSync(fullPath)) return null; // Fallback to disk
+
+                const entry = state.entryRel ?? './src/index.js';
+                const entryPath = entry.startsWith('/') ? entry : `/${entry}`;
+
+                return [
+                    '<!DOCTYPE html>',
+                    '<html lang="en">',
+                    '<head>',
+                    '    <meta charset="UTF-8" />',
+                    '    <meta name="viewport" content="width=device-width, initial-scale=1.0" />',
+                    `    <title>${state.name}</title>`,
+                    '</head>',
+                    '<body>',
+                    '    <div id="app"></div>',
+                    '    <script type="module">',
+                    "        import { render } from 'round-core';",
+                    `        import App from '${entryPath}';`,
+                    '',
+                    "        render(App, document.getElementById('app'));",
+                    '    </script>',
+                    '</body>',
+                    '</html>'
+                ].join('\n');
+            }
+
             if (!isMdRawRequest(id)) return;
 
             const fileAbs = stripQuery(id);

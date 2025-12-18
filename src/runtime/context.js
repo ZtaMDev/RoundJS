@@ -29,18 +29,29 @@ export function createContext(defaultValue) {
     };
 
     function Provider(props = {}) {
-        const value = props.value;
-        const child = Array.isArray(props.children) ? props.children[0] : props.children;
-        const childFn = typeof child === 'function' ? child : () => child;
+        const children = props.children;
 
-        return createElement('span', { style: { display: 'contents' } }, () => {
-            pushContext({ [ctx.id]: value });
-            try {
-                return childFn();
-            } finally {
-                popContext();
-            }
-        });
+        // Push context now so that any createElement/appendChild called 
+        // during the instantiation of this Provider branch picks it up immediately.
+        pushContext({ [ctx.id]: props.value });
+        try {
+            // We use a span to handle reactive value updates and dynamic children.
+            return createElement('span', { style: { display: 'contents' } }, () => {
+                // Read current value (reactive if it's a signal)
+                const val = (typeof props.value === 'function' && props.value.peek) ? props.value() : props.value;
+
+                // Push it during the effect run too! This ensures that anything returned 
+                // from this callback (which might trigger more appendChild calls) sees the context.
+                pushContext({ [ctx.id]: val });
+                try {
+                    return children;
+                } finally {
+                    popContext();
+                }
+            });
+        } finally {
+            popContext();
+        }
     }
 
     ctx.Provider = Provider;

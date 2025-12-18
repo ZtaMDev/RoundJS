@@ -322,25 +322,53 @@ This compiles roughly to a `.map(...)` under the hood.
 
 ## Routing
 
-Round includes router primitives intended for SPA navigation.
+Round includes router primitives intended for SPA navigation. All route paths must start with a forward slash `/`.
 
-Typical usage:
+### Basic Usage
 
 ```jsx
-import { Route } from 'round-core';
+import { Route, Link } from 'round-core';
 
 export default function App() {
     return (
         <div>
-            <Route route="/" title="Home">
-                <div>Home</div>
+            <nav>
+                <Link href="/">Home</Link>
+                <Link href="/about">About</Link>
+            </nav>
+
+            <Route route="/" title="Home" exact>
+                <div>Welcome Home</div>
             </Route>
             <Route route="/about" title="About">
-                <div>About</div>
+                <div>About Us Content</div>
             </Route>
         </div>
     );
 }
+```
+
+### Nested Routing and Layouts
+
+Routes can be nested to create hierarchical layouts. Child routes automatically inherit and combine paths with their parents.
+
+- **Prefix Matching**: By default, routes use prefix matching (except for the root `/`). This allows a parent route to stay rendered as a "shell" or layout while its children are visited.
+- **Exact Matching**: Use the `exact` prop to ensure a route only renders when the path matches precisely (default for root `/`).
+
+```jsx
+<Route route="/dashboard" title="Dashboard">
+    <h1>Dashboard Shell</h1>
+
+    {/* This route matches /dashboard/profile */}
+    <Route route="/dashboard/profile">
+        <h2>User Profile</h2>
+    </Route>
+
+    {/* This route matches /dashboard/settings */}
+    <Route route="/dashboard/settings">
+        <h2>Settings</h2>
+    </Route>
+</Route>
 ```
 
 ## Suspense and lazy loading

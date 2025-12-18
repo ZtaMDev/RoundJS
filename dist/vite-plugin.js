@@ -427,6 +427,8 @@ function RoundPlugin(pluginOptions = {}) {
     configPathAbs: null,
     configDir: null,
     entryAbs: null,
+    entryRel: null,
+    name: "Round",
     startHead: null,
     startHeadHtml: null
   };
@@ -454,7 +456,9 @@ function RoundPlugin(pluginOptions = {}) {
     state.routingTrailingSlash = trailingSlash !== void 0 ? Boolean(trailingSlash) : true;
     const customTags = config?.htmlTags;
     state.customTags = Array.isArray(customTags) ? customTags : [];
+    state.name = config?.name ?? "Round";
     const entryRel = config?.entry;
+    state.entryRel = entryRel;
     state.entryAbs = entryRel ? resolveMaybeRelative(configDir, entryRel) : null;
     const include = pluginOptions.include ?? config?.include ?? [];
     const exclude = pluginOptions.exclude ?? config?.exclude ?? ["./node_modules", "./dist"];
@@ -609,7 +613,41 @@ ${head.raw}`;
         }
       };
     },
+    resolveId(id) {
+      if (id === "/index.html" || id === "index.html") {
+        const fullPath = path.resolve(state.rootDir, "index.html");
+        if (!fs.existsSync(fullPath)) {
+          return "/index.html";
+        }
+      }
+      return null;
+    },
     load(id) {
+      if (id === "/index.html" || id === "index.html") {
+        const fullPath = path.resolve(state.rootDir, "index.html");
+        if (fs.existsSync(fullPath)) return null;
+        const entry = state.entryRel ?? "./src/index.js";
+        const entryPath = entry.startsWith("/") ? entry : `/${entry}`;
+        return [
+          "<!DOCTYPE html>",
+          '<html lang="en">',
+          "<head>",
+          '    <meta charset="UTF-8" />',
+          '    <meta name="viewport" content="width=device-width, initial-scale=1.0" />',
+          `    <title>${state.name}</title>`,
+          "</head>",
+          "<body>",
+          '    <div id="app"></div>',
+          '    <script type="module">',
+          "        import { render } from 'round-core';",
+          `        import App from '${entryPath}';`,
+          "",
+          "        render(App, document.getElementById('app'));",
+          "    <\/script>",
+          "</body>",
+          "</html>"
+        ].join("\n");
+      }
       if (!isMdRawRequest(id)) return;
       const fileAbs = stripQuery(id);
       try {
