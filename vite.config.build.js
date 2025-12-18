@@ -33,4 +33,16 @@ export default defineConfig({
             }
         },
     },
+    plugins: [
+        {
+            name: 'copy-dts',
+            closeBundle() {
+                const src = path.resolve(__dirname, 'src/index.d.ts');
+                const dest = path.resolve(__dirname, 'dist/index.d.ts');
+                if (fs.existsSync(src)) {
+                    fs.copyFileSync(src, dest);
+                }
+            }
+        }
+    ]
 });
