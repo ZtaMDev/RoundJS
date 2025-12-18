@@ -10,6 +10,19 @@ function onSignal() {
 }
 process.on("SIGINT", onSignal);
 process.on("SIGTERM", onSignal);
+process.on("exit", () => {
+  cleanupTemporaryFiles();
+});
+const temporaryFiles = /* @__PURE__ */ new Set();
+function cleanupTemporaryFiles() {
+  for (const f of temporaryFiles) {
+    try {
+      if (fs.existsSync(f)) fs.unlinkSync(f);
+    } catch {
+    }
+  }
+  temporaryFiles.clear();
+}
 function normalizePath(p) {
   return p.replaceAll("\\", "/");
 }
@@ -323,6 +336,40 @@ function coerceNumber(v, fallback) {
   const n = Number(v);
   return Number.isFinite(n) ? n : fallback;
 }
+function generateIndexHtml(config) {
+  const name = config?.name ?? "Round";
+  const rawEntry = config?.entry ?? "./src/app.round";
+  let entry = rawEntry;
+  if (entry.startsWith("./")) entry = entry.slice(1);
+  if (!entry.startsWith("/")) entry = "/" + entry;
+  return [
+    "<!DOCTYPE html>",
+    '<html lang="en">',
+    "<head>",
+    '    <meta charset="UTF-8" />',
+    '    <meta name="viewport" content="width=device-width, initial-scale=1.0" />',
+    `    <title>${name}</title>`,
+    "</head>",
+    "<body>",
+    '    <div id="app"></div>',
+    '    <script type="module">',
+    "        import { render } from 'round-core';",
+    `        import App from '${entry}';`,
+    "",
+    "        render(App, document.getElementById('app'));",
+    "    <\/script>",
+    "</body>",
+    "</html>"
+  ].join("\n");
+}
+function writeTemporaryIndex(rootDir, config) {
+  const indexPath = path.resolve(rootDir, "index.html");
+  if (fs.existsSync(indexPath)) return false;
+  const content = generateIndexHtml(config);
+  fs.writeFileSync(indexPath, content, "utf8");
+  temporaryFiles.add(indexPath);
+  return true;
+}
 async function runDev({ rootDir, configPathAbs, config }) {
   const startedAt = Date.now();
   const configDir = path.dirname(configPathAbs);
@@ -344,6 +391,7 @@ async function runDev({ rootDir, configPathAbs, config }) {
     const serverPort2 = coerceNumber(nextConfig?.dev?.port, 5173);
     const open2 = Boolean(nextConfig?.dev?.open);
     const base2 = nextConfig?.routing?.base ?? "/";
+    writeTemporaryIndex(rootDir, nextConfig);
     if (showBanner) {
       banner();
       process.stdout.write(`${c("  Config", "gray")}  ${configPathAbs}
@@ -413,6 +461,7 @@ async function runBuild({ rootDir, configPathAbs, config }) {
   normalizePath(path.relative(rootDir, entryAbs));
   const outDir = config?.output ? resolveFrom(configDir, config.output) : resolveFrom(rootDir, "./dist");
   const base = config?.routing?.base ?? "/";
+  writeTemporaryIndex(rootDir, config);
   banner();
   process.stdout.write(`${c("  Config", "gray")}  ${configPathAbs}
 `);

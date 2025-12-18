@@ -329,44 +329,9 @@ export default function RoundPlugin(pluginOptions = {}) {
         },
 
         resolveId(id) {
-            if (id === '/index.html' || id === 'index.html') {
-                const fullPath = path.resolve(state.rootDir, 'index.html');
-                if (!fs.existsSync(fullPath)) {
-                    return '/index.html'; // Virtual ID
-                }
-            }
             return null;
         },
-
         load(id) {
-            if (id === '/index.html' || id === 'index.html') {
-                const fullPath = path.resolve(state.rootDir, 'index.html');
-                if (fs.existsSync(fullPath)) return null; // Fallback to disk
-
-                const entry = state.entryRel ?? './src/index.js';
-                const entryPath = entry.startsWith('/') ? entry : `/${entry}`;
-
-                return [
-                    '<!DOCTYPE html>',
-                    '<html lang="en">',
-                    '<head>',
-                    '    <meta charset="UTF-8" />',
-                    '    <meta name="viewport" content="width=device-width, initial-scale=1.0" />',
-                    `    <title>${state.name}</title>`,
-                    '</head>',
-                    '<body>',
-                    '    <div id="app"></div>',
-                    '    <script type="module">',
-                    "        import { render } from 'round-core';",
-                    `        import App from '${entryPath}';`,
-                    '',
-                    "        render(App, document.getElementById('app'));",
-                    '    </script>',
-                    '</body>',
-                    '</html>'
-                ].join('\n');
-            }
-
             if (!isMdRawRequest(id)) return;
 
             const fileAbs = stripQuery(id);
