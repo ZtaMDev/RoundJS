@@ -18,9 +18,55 @@ Extension for VSCode [here](https://marketplace.visualstudio.com/items?itemName=
 
 </div>
 
+## Packages Overview
+
+Round JS is split into two main layers:
+
+### `round-core`
+
+`round-core` is the **foundation of Round JS**.
+
+It is a lightweight framework focused on:
+
+- Single Page Applications (SPA)
+- Fine-grained reactivity
+- DOM-first rendering (no Virtual DOM)
+- Simple and optional SSR support (in development)
+
+You can think of `round-core` as:
+- A **framework-level runtime**, not just a state library
+- Comparable in scope to React + Router + Signals, but significantly smaller
+- Suitable for fast SPAs and simple SSR setups without heavy infrastructure
+
+### `round-kit` (in development)
+
+`round-kit` is the **fullstack framework layer** built on top of `round-core`.
+
+It will provide:
+- File-based routing
+- Advanced SSR and streaming
+- Data loading conventions
+- API routes and server utilities
+- Production-ready fullstack tooling
+- Deployment flexibility without being tied to a specific platform
+
+Conceptually, `round-kit` aims to be:
+- A “Next.js-like” framework
+- Without vendor lock-in
+- Built entirely around Round’s reactive and DOM-first model
+
+## Installation
+
+To use Round JS today, install the core package:
 
 ```bash
 npm install round-core
+```
+
+Or with Bun:
+
+```bash
+bun add round-core
 ```
 
 Instead of a Virtual DOM diff, Round updates the UI by subscribing DOM updates directly to reactive primitives (**signals**) and **bindables**. This keeps rendering predictable, small, and fast for interactive apps.
@@ -56,35 +102,6 @@ A **signal** is a small reactive container.
 - Reading a signal inside an `effect()` tracks a dependency.
 - Writing to a signal triggers only the subscribed computations.
 
-
-## Normal Installation
-
-Simply install the `round-core` package
-
-```bash
-bun add round-core
-```
-
-Or:
-
-```bash
-npm install round-core
-```
-
-## Repo Installation
-
-> Round is currently in active development. If you are using the repository directly, install dependencies and run the CLI locally.
-
-```bash
-bun install
-```
-
-Or:
-
-```bash
-npm install
-```
-
 ## Quick start (create a new app)
 
 Round includes a CLI with a project initializer.
@@ -100,7 +117,9 @@ This scaffolds a minimal Round app with `src/app.round` and an example `src/coun
 
 ## `.round` files
 
-A `.round` file is a JSX-based component module (ESM) compiled by the Round toolchain. you can also use .jsx files but you wont get the round JSX superset features like conditional rendering and other features.
+A `.round` file is a JSX-based component module (ESM) compiled by the Round toolchain.
+You can also use `.jsx` files, but you will not get the Round JSX superset features
+such as extended control flow.
 
 Example `src/app.round`:
 
