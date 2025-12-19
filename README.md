@@ -18,6 +18,20 @@ Extension for VSCode [here](https://marketplace.visualstudio.com/items?itemName=
 
 </div>
 
+`round-core` is the **foundation of Round JS**.
+
+It is a lightweight framework focused on:
+
+- Single Page Applications (SPA)
+- Fine-grained reactivity
+- DOM-first rendering (no Virtual DOM)
+- Simple and optional SSR support (in development)
+
+You can think of `round-core` as:
+- A **framework-level runtime**, not just a state library
+- Comparable in scope to React + Router + Signals, but significantly smaller
+- Suitable for fast SPAs and simple SSR setups without heavy infrastructure
+
 ## Installation
 
 To use Round JS today, install the core package:
