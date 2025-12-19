@@ -18,7 +18,7 @@ Extension for VSCode [here](https://marketplace.visualstudio.com/items?itemName=
 
 </div>
 
-`round-core` is the **foundation of Round JS**.
+The `round-core` package is the **foundation of RoundJS**.
 
 It is a lightweight framework focused on:
 
