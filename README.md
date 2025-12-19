@@ -1,4 +1,4 @@
-<h1 align="center">Round Framework</h1>
+<h1 align="center">Round JS</h1>
  
 <p align="center">
   <img src="https://raw.githubusercontent.com/ZtaMDev/RoundJS/main/Round.png" alt="Round Framework Logo" width="200" />
