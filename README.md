@@ -18,43 +18,6 @@ Extension for VSCode [here](https://marketplace.visualstudio.com/items?itemName=
 
 </div>
 
-## Packages Overview
-
-Round JS is split into two main layers:
-
-### `round-core`
-
-`round-core` is the **foundation of Round JS**.
-
-It is a lightweight framework focused on:
-
-- Single Page Applications (SPA)
-- Fine-grained reactivity
-- DOM-first rendering (no Virtual DOM)
-- Simple and optional SSR support (in development)
-
-You can think of `round-core` as:
-- A **framework-level runtime**, not just a state library
-- Comparable in scope to React + Router + Signals, but significantly smaller
-- Suitable for fast SPAs and simple SSR setups without heavy infrastructure
-
-### `round-kit` (in development)
-
-`round-kit` is the **fullstack framework layer** built on top of `round-core`.
-
-It will provide:
-- File-based routing
-- Advanced SSR and streaming
-- Data loading conventions
-- API routes and server utilities
-- Production-ready fullstack tooling
-- Deployment flexibility without being tied to a specific platform
-
-Conceptually, `round-kit` aims to be:
-- A “Next.js-like” framework
-- Without vendor lock-in
-- Built entirely around Round’s reactive and DOM-first model
-
 ## Installation
 
 To use Round JS today, install the core package:
