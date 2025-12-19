@@ -43,18 +43,13 @@ bun add round-core
 
 ## What Round is focused on
 
-- **Fine-grained reactivity**: update only what depends on the changed signal.
-- **Ergonomic bindings**: built-in two-way bindings with `bind:*` directives.
-- **A JSX superset**: `.round` files support extra control-flow syntax that compiles to JavaScript.
-- **Minimal runtime**: DOM-first runtime (no VDOM diffing).
-
-## Architecture
-
 Round is a **No-VDOM** framework.
 
 1.  **Direct DOM Manipulation**: Components run once. They return real DOM nodes (via `document.createElement`).
 2.  **Fine-Grained Reactivity**: Use of `signal`, `effect`, and `bindable` creates a dependency graph.
-3.  **Surgical Updates**: When a signal changes, only the specific text node, attribute, or property subscribed to that signal is updated. The component function does not re-run.
+3.  **Ergonomic bindings**: built-in two-way bindings with `bind:*` directives.
+4.  **Surgical Updates**: When a signal changes, only the specific text node, attribute, or property subscribed to that signal is updated. The component function does not re-run.
+5.  **A JSX superset**: `.round` files support extra control-flow syntax that compiles to JavaScript.
 
 This avoids the overhead of Virtual DOM diffing and reconciliation entirely.
 
