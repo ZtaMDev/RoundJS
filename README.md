@@ -18,14 +18,9 @@ Extension for VSCode [here](https://marketplace.visualstudio.com/items?itemName=
 
 </div>
 
+Instead of a Virtual DOM diff, Round updates the UI by subscribing DOM updates directly to reactive primitives (**signals**) and **bindables**. This keeps rendering predictable, small, and fast for interactive apps.
+
 The `round-core` package is the **foundation of RoundJS**.
-
-It is a lightweight framework focused on:
-
-- Single Page Applications (SPA)
-- Fine-grained reactivity
-- DOM-first rendering (no Virtual DOM)
-- Simple and optional SSR support (in development)
 
 You can think of `round-core` as:
 - A **framework-level runtime**, not just a state library
@@ -46,11 +41,8 @@ Or with Bun:
 bun add round-core
 ```
 
-Instead of a Virtual DOM diff, Round updates the UI by subscribing DOM updates directly to reactive primitives (**signals**) and **bindables**. This keeps rendering predictable, small, and fast for interactive apps.
-
 ## What Round is focused on
 
-- **SPA-first**: client-side navigation and UI updates.
 - **Fine-grained reactivity**: update only what depends on the changed signal.
 - **Ergonomic bindings**: built-in two-way bindings with `bind:*` directives.
 - **A JSX superset**: `.round` files support extra control-flow syntax that compiles to JavaScript.
