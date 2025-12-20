@@ -1,4 +1,4 @@
-<h1 align="center">Round Framework</h1>
+<h1 align="center">Round JS</h1>
  
 <p align="center">
   <img src="https://raw.githubusercontent.com/ZtaMDev/RoundJS/main/Round.png" alt="Round Framework Logo" width="200" />
@@ -14,32 +14,44 @@
 
 <div align="center">
  
-Extension for VSCode [here](https://marketplace.visualstudio.com/items?itemName=ZtaMDev.round) and OpenVSX version [here](https://open-vsx.org/extension/ztamdev/round)
+Extension for [VSCode](https://marketplace.visualstudio.com/items?itemName=ZtaMDev.round) and [OpenVSX](https://open-vsx.org/extension/ztamdev/round)
 
 </div>
 
+--- 
+
+Instead of a Virtual DOM diff, Round updates the UI by subscribing DOM updates directly to reactive primitives (**signals**) and **bindables**. This keeps rendering predictable, small, and fast for interactive apps.
+
+The `round-core` package is the **foundation of RoundJS**.
+
+You can think of `round-core` as:
+- A **framework-level runtime**, not just a state library
+- Comparable in scope to React + Router + Signals, but significantly smaller
+- Suitable for fast SPAs and simple SSR setups without heavy infrastructure
+
+## Installation
+
+To use Round JS today, install the core package:
 
 ```bash
 npm install round-core
 ```
 
-Instead of a Virtual DOM diff, Round updates the UI by subscribing DOM updates directly to reactive primitives (**signals**) and **bindables**. This keeps rendering predictable, small, and fast for interactive apps.
+Or with Bun:
+
+```bash
+bun add round-core
+```
 
 ## What Round is focused on
-
-- **SPA-first**: client-side navigation and UI updates.
-- **Fine-grained reactivity**: update only what depends on the changed signal.
-- **Ergonomic bindings**: built-in two-way bindings with `bind:*` directives.
-- **A JSX superset**: `.round` files support extra control-flow syntax that compiles to JavaScript.
-- **Minimal runtime**: DOM-first runtime (no VDOM diffing).
-
-## Architecture
 
 Round is a **No-VDOM** framework.
 
 1.  **Direct DOM Manipulation**: Components run once. They return real DOM nodes (via `document.createElement`).
 2.  **Fine-Grained Reactivity**: Use of `signal`, `effect`, and `bindable` creates a dependency graph.
-3.  **Surgical Updates**: When a signal changes, only the specific text node, attribute, or property subscribed to that signal is updated. The component function does not re-run.
+3.  **Ergonomic bindings**: built-in two-way bindings with `bind:*` directives.
+4.  **Surgical Updates**: When a signal changes, only the specific text node, attribute, or property subscribed to that signal is updated. The component function does not re-run.
+5.  **A JSX superset**: `.round` files support extra control-flow syntax that compiles to JavaScript.
 
 This avoids the overhead of Virtual DOM diffing and reconciliation entirely.
 
@@ -56,35 +68,6 @@ A **signal** is a small reactive container.
 - Reading a signal inside an `effect()` tracks a dependency.
 - Writing to a signal triggers only the subscribed computations.
 
-
-## Normal Installation
-
-Simply install the `round-core` package
-
-```bash
-bun add round-core
-```
-
-Or:
-
-```bash
-npm install round-core
-```
-
-## Repo Installation
-
-> Round is currently in active development. If you are using the repository directly, install dependencies and run the CLI locally.
-
-```bash
-bun install
-```
-
-Or:
-
-```bash
-npm install
-```
-
 ## Quick start (create a new app)
 
 Round includes a CLI with a project initializer.
@@ -100,7 +83,9 @@ This scaffolds a minimal Round app with `src/app.round` and an example `src/coun
 
 ## `.round` files
 
-A `.round` file is a JSX-based component module (ESM) compiled by the Round toolchain. you can also use .jsx files but you wont get the round JSX superset features like conditional rendering and other features.
+A `.round` file is a JSX-based component module (ESM) compiled by the Round toolchain.
+You can also use `.jsx` files, but you will not get the Round JSX superset features
+such as extended control flow.
 
 Example `src/app.round`:
 
