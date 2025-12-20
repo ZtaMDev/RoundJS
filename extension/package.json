@@ -17,9 +17,6 @@
   "activationEvents": [
     "workspaceContains:**/*.round"
   ],
-  "files.associations": {
-    "*.round": "javascriptreact"
-  },
   "categories": [
     "Programming Languages"
   ],
