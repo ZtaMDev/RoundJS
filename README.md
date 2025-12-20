@@ -327,6 +327,20 @@ Notes:
 
 This compiles roughly to a `.map(...)` under the hood.
 
+### `switch`
+
+```jsx
+{switch(status()){
+    case 'loading': return <Spinner />;
+    case 'error':   return <ErrorMessage />;
+    default:        return <DataView />;
+}}
+```
+
+Notes:
+- The `switch` expression is automatically wrapped in a reactive tracker, ensuring that the view updates surgically when the condition (e.g., a signal) changes.
+- Each case handles its own rendering without re-running the parent component.
+
 ## Routing
 
 Round includes router primitives intended for SPA navigation. All route paths must start with a forward slash `/`.

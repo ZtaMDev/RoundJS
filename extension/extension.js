@@ -6,7 +6,7 @@ let client;
 
 function activate(context) {
     const outputChannel = vscode.window.createOutputChannel('Round');
-    outputChannel.appendLine('Round Extension Activated (Astro-Inspired LSP Enabled)');
+    outputChannel.appendLine('Round Extension Activated (LSP)');
     context.subscriptions.push(outputChannel);
 
     // --- LSP Setup ---

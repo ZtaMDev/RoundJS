@@ -2,7 +2,7 @@
   "name": "round",
   "displayName": "Round",
   "description": "Language support for .round (Round framework)",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "main": "./extension.js",
   "publisher": "ZtaMDev",
   "icon": "Round.png",
@@ -15,7 +15,6 @@
     "vscode": "^1.90.0"
   },
   "activationEvents": [
-    "onLanguage:round",
     "workspaceContains:**/*.round"
   ],
   "categories": [

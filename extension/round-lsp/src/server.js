@@ -32,6 +32,7 @@ const virtualDocs = new Map(); // roundUri -> { roundDoc, tsxText, map, version 
 const tsFiles = new Map();     // tsxFsPath -> { text, version }
 let workspaceRoot = null;
 let roundRootCached = null;
+
 function getRoundRoot() {
     if (roundRootCached) return roundRootCached;
     const localNodeModules = path.join(workspaceRoot || '', 'node_modules', 'round-core');
@@ -44,17 +45,13 @@ const host = {
     getScriptFileNames: () => {
         const names = Array.from(tsFiles.keys());
         const root = getRoundRoot();
-
-        // Try to find the best d.ts
         const dtsPaths = [
             path.join(root, "src/index.d.ts"),
             path.join(root, "index.d.ts"),
             path.join(root, "dist/index.d.ts")
         ];
-
         const dtsPath = dtsPaths.find(p => fs.existsSync(p));
         const entryPath = dtsPath || normalizePath(path.join(root, "index.js"));
-
         if (fs.existsSync(entryPath) && !names.includes(entryPath)) names.push(entryPath);
         return names;
     },
@@ -62,11 +59,7 @@ const host = {
         const normalized = normalizePath(fileName);
         if (tsFiles.has(normalized)) return tsFiles.get(normalized).version.toString();
         if (fs.existsSync(normalized)) {
-            try {
-                return fs.statSync(normalized).mtimeMs.toString();
-            } catch (e) {
-                return '0';
-            }
+            try { return fs.statSync(normalized).mtimeMs.toString(); } catch (e) { return '0'; }
         }
         return '0';
     },
@@ -76,7 +69,16 @@ const host = {
     },
     getCurrentDirectory: () => workspaceRoot || process.cwd(),
     getCompilationSettings: () => {
-        const settings = {
+        const root = getRoundRoot();
+        const dtsPaths = [
+            path.join(root, "src/index.d.ts"),
+            path.join(root, "index.d.ts"),
+            path.join(root, "dist/index.d.ts")
+        ];
+        const dtsPath = dtsPaths.find(p => fs.existsSync(p));
+        const entryPath = dtsPath || normalizePath(path.join(root, "index.js"));
+
+        return {
             jsx: ts.JsxEmit.React,
             jsxFactory: 'React.createElement',
             jsxFragmentFactory: 'React.Fragment',
@@ -87,22 +89,11 @@ const host = {
             skipLibCheck: true,
             lib: ['lib.esnext.d.ts', 'lib.dom.d.ts'],
             baseUrl: workspaceRoot || '.',
-            paths: {}
+            paths: {
+                "round-core": [entryPath],
+                "round-core/*": [path.join(root, "*")]
+            }
         };
-
-        const root = getRoundRoot();
-        const dtsPaths = [
-            path.join(root, "src/index.d.ts"),
-            path.join(root, "index.d.ts"),
-            path.join(root, "dist/index.d.ts")
-        ];
-        const dtsPath = dtsPaths.find(p => fs.existsSync(p));
-        const entryPath = dtsPath || normalizePath(path.join(root, "index.js"));
-
-        settings.paths["round-core"] = [entryPath];
-        settings.paths["round-core/*"] = [path.join(root, "*")];
-
-        return settings;
     },
     getDefaultLibFileName: options => normalizePath(ts.getDefaultLibFilePath(options)),
     fileExists: fileName => {
@@ -113,11 +104,7 @@ const host = {
         const normalized = normalizePath(fileName);
         if (tsFiles.has(normalized)) return tsFiles.get(normalized).text;
         if (ts.sys.fileExists(normalized)) {
-            try {
-                return ts.sys.readFile(normalized);
-            } catch (e) {
-                return undefined;
-            }
+            try { return ts.sys.readFile(normalized); } catch (e) { return undefined; }
         }
         return undefined;
     },
@@ -130,12 +117,13 @@ const ls = ts.createLanguageService(host, ts.createDocumentRegistry());
 
 connection.onInitialize((params) => {
     workspaceRoot = params.rootPath || (params.workspaceFolders?.[0]?.uri ? URI.parse(params.workspaceFolders[0].uri).fsPath : null);
-
     return {
         capabilities: {
             textDocumentSync: TextDocumentSyncKind.Full,
             hoverProvider: true,
-            definitionProvider: true
+            definitionProvider: true,
+            completionProvider: { resolveProvider: true, triggerCharacters: ['.', '"', "'", '/', '<', '@', '*', ' '] },
+            signatureHelpProvider: { triggerCharacters: ['(', ','] }
         }
     };
 });
@@ -151,7 +139,6 @@ connection.onInitialized(async () => {
             processFile(uri, content, 0, false);
             discovered.push(uri);
         }
-        // Phase 2: Send diagnostics now that all files are in context
         for (const uri of discovered) {
             const tsxFsPath = normalizePath(URI.parse(uri + '.tsx').fsPath);
             sendDiagnostics(uri, tsxFsPath);
@@ -173,13 +160,13 @@ function processFile(uri, text, version, send = true) {
         virtualDocs.set(uri, {
             roundDoc: TextDocument.create(uri, 'round', version, text),
             tsxText: code,
-            edits, // Store precise edits
+            edits,
             version
         });
 
         if (send) sendDiagnostics(uri, tsxFsPath);
     } catch (e) {
-        // connection.console.error(`Transform failed for ${uri}: ${e.message}`);
+        connection.console.error(`Transform failed for ${uri}: ${e.message}`);
     }
 }
 
@@ -193,7 +180,7 @@ connection.onDidChangeWatchedFiles(params => {
             const tsxFsPath = normalizePath(URI.parse(change.uri + '.tsx').fsPath);
             tsFiles.delete(tsxFsPath);
             virtualDocs.delete(change.uri);
-        } else if (change.type === FileChangeType.Created || change.type === FileChangeType.Changed) {
+        } else {
             const doc = documents.get(change.uri);
             if (!doc) {
                 const fsPath = normalizePath(URI.parse(change.uri).fsPath);
@@ -204,21 +191,6 @@ connection.onDidChangeWatchedFiles(params => {
         }
     }
 });
-
-const VIRTUAL_IMPORT = `// @ts-nocheck
-import { Fragment, createElement } from 'round-core';
-const React = { createElement, Fragment };
-
-declare global {
-    namespace JSX {
-        interface IntrinsicElements {
-            [elemName: string]: any;
-        }
-        interface ElementAttributesProperty { props: {}; }
-        type Element = any;
-    }
-}
-`;
 
 function sendDiagnostics(roundUri, tsxFsPath) {
     try {
@@ -252,44 +224,26 @@ function toGeneratedOffset(originalOffset, edits) {
     let current = originalOffset;
     for (const edit of edits) {
         if (edit.offset <= originalOffset) {
-            // If the edit is entirely before our offset, or starts at it
             if (originalOffset >= edit.offset + edit.length) {
                 current += (edit.newLength - edit.length);
             } else {
-                // Offset is inside the range being replaced
-                // map it to the start of the replacement
                 current += (edit.offset - originalOffset);
                 break;
             }
-        }
+        } else break;
     }
     return current;
 }
 
 function toOriginalOffset(generatedOffset, edits) {
-    let current = generatedOffset;
-    let original = generatedOffset;
-
-    // Need to work backwards through the edits to find the original location
-    // Since edits are sorted by original offset, we can simulate the transformation
     let accum = 0;
     for (const edit of edits) {
         const genStart = edit.offset + accum;
         const genEnd = genStart + edit.newLength;
-
-        if (generatedOffset < genStart) {
-            // Offset is before this edit
-            return generatedOffset - accum;
-        }
-
-        if (generatedOffset >= genStart && generatedOffset < genEnd) {
-            // Offset is inside the replacement
-            return edit.offset;
-        }
-
+        if (generatedOffset < genStart) return generatedOffset - accum;
+        if (generatedOffset >= genStart && generatedOffset < genEnd) return edit.offset;
         accum += (edit.newLength - edit.length);
     }
-
     return generatedOffset - accum;
 }
 
@@ -318,78 +272,91 @@ connection.onHover((params) => {
     try {
         const vdoc = virtualDocs.get(params.textDocument.uri);
         if (!vdoc) return null;
-
         const tsxFsPath = normalizePath(URI.parse(params.textDocument.uri + '.tsx').fsPath);
         const originalOffset = vdoc.roundDoc.offsetAt(params.position);
         const offset = toGeneratedOffset(originalOffset, vdoc.edits || []);
-
         const info = ls.getQuickInfoAtPosition(tsxFsPath, offset);
         if (!info) return null;
-
-        const text = ts.displayPartsToString(info.displayParts);
-        const docs = ts.displayPartsToString(info.documentation);
-        const tags = info.tags ? info.tags.map(t => `*@${t.name}* ${t.text ? ts.displayPartsToString(t.text) : ''}`).join('\n\n') : '';
-
         return {
             contents: {
                 kind: 'markdown',
-                value: `\`\`\`typescript\n${text}\n\`\`\`\n${docs}${tags ? '\n\n' + tags : ''}`
+                value: `\`\`\`typescript\n${ts.displayPartsToString(info.displayParts)}\n\`\`\`\n\n${ts.displayPartsToString(info.documentation)}${info.tags ? '\n\n' + info.tags.map(t => `*@${t.name}* ${t.text ? ts.displayPartsToString(t.text) : ''}`).join('\n\n') : ''}`
             }
         };
-    } catch (e) {
-        return null;
-    }
+    } catch (e) { return null; }
+});
+
+connection.onCompletion((params) => {
+    try {
+        const vdoc = virtualDocs.get(params.textDocument.uri);
+        const tsxFsPath = normalizePath(URI.parse(params.textDocument.uri + (vdoc ? '.tsx' : '')).fsPath);
+        const doc = vdoc ? vdoc.roundDoc : documents.get(params.textDocument.uri);
+        if (!doc) return null;
+        const offset = vdoc ? toGeneratedOffset(doc.offsetAt(params.position), vdoc.edits || []) : doc.offsetAt(params.position);
+        const completions = ls.getCompletionsAtPosition(tsxFsPath, offset, { includeExternalModuleExports: true, includeInsertTextCompletions: true });
+        if (!completions) return null;
+        return completions.entries.map(entry => ({
+            label: entry.name,
+            kind: (entry.kind === ts.ScriptElementKind.variableElement) ? 6 : (entry.kind === ts.ScriptElementKind.functionElement ? 3 : 1),
+            data: { uri: params.textDocument.uri, offset, name: entry.name }
+        }));
+    } catch (e) { return null; }
+});
+
+connection.onCompletionResolve((item) => {
+    try {
+        const { uri, offset, name } = item.data;
+        const vdoc = virtualDocs.get(uri);
+        const tsxFsPath = normalizePath(URI.parse(uri + (vdoc ? '.tsx' : '')).fsPath);
+        const details = ls.getCompletionEntryDetails(tsxFsPath, offset, name, undefined, undefined, undefined, undefined);
+        if (details) {
+            item.detail = ts.displayPartsToString(details.displayParts);
+            item.documentation = { kind: 'markdown', value: ts.displayPartsToString(details.documentation) };
+        }
+        return item;
+    } catch (e) { return item; }
+});
+
+connection.onSignatureHelp((params) => {
+    try {
+        const vdoc = virtualDocs.get(params.textDocument.uri);
+        const tsxFsPath = normalizePath(URI.parse(params.textDocument.uri + (vdoc ? '.tsx' : '')).fsPath);
+        const doc = vdoc ? vdoc.roundDoc : documents.get(params.textDocument.uri);
+        if (!doc) return null;
+        const offset = vdoc ? toGeneratedOffset(doc.offsetAt(params.position), vdoc.edits || []) : doc.offsetAt(params.position);
+        const help = ls.getSignatureHelpItems(tsxFsPath, offset, undefined);
+        if (!help) return null;
+        return {
+            signatures: help.items.map(item => ({
+                label: ts.displayPartsToString(item.prefixDisplayParts) + item.parameters.map(p => ts.displayPartsToString(p.displayParts)).join(', ') + ts.displayPartsToString(item.suffixDisplayParts),
+                documentation: ts.displayPartsToString(item.documentation),
+                parameters: item.parameters.map(p => ({ label: ts.displayPartsToString(p.displayParts), documentation: ts.displayPartsToString(p.documentation) }))
+            })),
+            activeSignature: help.selectedItemIndex, activeParameter: help.argumentIndex
+        };
+    } catch (e) { return null; }
 });
 
 connection.onDefinition((params) => {
     try {
         const vdoc = virtualDocs.get(params.textDocument.uri);
         if (!vdoc) return null;
-
         const tsxFsPath = normalizePath(URI.parse(params.textDocument.uri + '.tsx').fsPath);
         const originalOffset = vdoc.roundDoc.offsetAt(params.position);
         const offset = toGeneratedOffset(originalOffset, vdoc.edits || []);
-
         const defs = ls.getDefinitionAtPosition(tsxFsPath, offset);
         if (!defs || defs.length === 0) return null;
-
         return defs.map(def => {
-            let fsPath = normalizePath(def.fileName);
-            let start = def.textSpan.start;
-            let length = def.textSpan.length;
-
-            const isVirtual = fsPath.endsWith('.round.tsx');
-            const uri = isVirtual ? URI.file(fsPath.slice(0, -4)).toString() : URI.file(fsPath).toString();
-
-            if (isVirtual) {
-                const targetVdoc = virtualDocs.get(uri);
-                if (targetVdoc && targetVdoc.edits) {
-                    start = toOriginalOffset(start, targetVdoc.edits);
-                }
-            }
-
+            const isVirtual = def.fileName.endsWith('.round.tsx');
+            const uri = URI.file(isVirtual ? def.fileName.slice(0, -4) : def.fileName).toString();
             const targetVdoc = virtualDocs.get(uri);
-            if (targetVdoc) {
-                return {
-                    uri,
-                    range: {
-                        start: targetVdoc.roundDoc.positionAt(start),
-                        end: targetVdoc.roundDoc.positionAt(start + length)
-                    }
-                };
-            }
-
-            return {
-                uri,
-                range: {
-                    start: { line: 0, character: 0 },
-                    end: { line: 0, character: 0 }
-                }
-            };
+            let start = def.textSpan.start;
+            if (targetVdoc) start = toOriginalOffset(start, targetVdoc.edits || []);
+            const targetDoc = targetVdoc ? targetVdoc.roundDoc : documents.get(uri);
+            if (!targetDoc) return null;
+            return { uri, range: { start: targetDoc.positionAt(start), end: targetDoc.positionAt(start + def.textSpan.length) } };
         }).filter(Boolean);
-    } catch (e) {
-        return null;
-    }
+    } catch (e) { return null; }
 });
 
 documents.listen(connection);

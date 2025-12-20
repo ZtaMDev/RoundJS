@@ -13,15 +13,17 @@
 ## Features
 
 ### Intelligent LSP
-Complete Language Server support for `.round` files, bringing the power of TypeScript to your reactive templates.
-- **Precision Mapping**: Error squiggles, hovers, and definitions align perfectly with your source code, even inside complex `if` and `for` blocks.
-- **Advanced Hovers**: Instant type information for signals, bindables, and props.
+Complete Language Server support for `.round` files, powered by a high-performance **On-Demand Architecture**.
+- **On-Demand Loading**: The extension only processes the files you are actually working on, making it ultra-light and near-instant on startup.
+- **No-Wait Hovers**: Synchronous on-demand transformation eliminates "Loading" glitches. Get instant type information for signals, bindables, and props.
+- **Precision Mapping**: Error squiggles, hovers, and definitions align perfectly with your source code, even inside complex `if`, `switch`, and `for` blocks.
 - **Go to Definition**: Navigate your signals and components with a single click.
+- **Throttled Diagnostics**: Real-time error reporting that respects your CPU, debounced for maximum responsiveness.
 
 ### Hybrid Syntax Highlighting
 A custom TextMate grammar designed specifically for Round's hybrid format.
 - Context-aware highlighting for HTML tags and JSX expressions.
-- Support for Round's custom control-flow: `{if(...){...}}` and `{for(... in ...){...}}`.
+- Support for Round's custom control-flow: `{if(...){...}}`, `{switch(...){...}}`, and `{for(... in ...){...}}`.
 - Special highlighting for the `bind:*` directive.
 
 ### Smart Snippets

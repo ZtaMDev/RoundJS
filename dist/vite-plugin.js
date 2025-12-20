@@ -202,7 +202,7 @@ function transform(code) {
       const block = parseBlock(result, blockStart);
       if (!block) break;
       const content = result.substring(block.start + 1, block.end);
-      const replacement = `{${list}.map(${item} => (<Fragment>${content}</Fragment>))}`;
+      const replacement = `{(() => ${list}.map(${item} => (<Fragment>${content}</Fragment>)))}`;
       const before = result.substring(0, exprStart);
       const after = result.substring(outer.end + 1);
       result = before + replacement + after;
@@ -220,8 +220,57 @@ function transform(code) {
       const block = parseBlock(result, blockStart);
       if (!block) break;
       const content = result.substring(block.start + 1, block.end);
-      const replacement = `{${list}.map(${item} => (<Fragment>${content}</Fragment>))}`;
+      const replacement = `{(() => ${list}.map(${item} => (<Fragment>${content}</Fragment>)))}`;
       const before = result.substring(0, exprStart);
+      const after = result.substring(block.end + 1);
+      result = before + replacement + after;
+    }
+    while (true) {
+      const match = result.match(/\{\s*switch\s*\(/);
+      if (!match) break;
+      const exprStart = match.index;
+      const outer = parseBlock(result, exprStart);
+      if (!outer) break;
+      let i = consumeWhitespace(result, exprStart + 1);
+      const head = result.slice(i);
+      const mm = head.match(/^switch\s*\((.*?)\)\s*\{/);
+      if (!mm) break;
+      const cond = mm[1];
+      const blockStart = i + mm[0].length - 1;
+      const block = parseBlock(result, blockStart);
+      if (!block) break;
+      const content = result.substring(block.start + 1, block.end);
+      const transformedContent = content.replace(/(case\s+.*?:|default:)([\s\S]*?)(?=case\s+.*?:|default:|$)/g, (m, label, body) => {
+        const trimmedBody = body.trim();
+        if (!trimmedBody) return m;
+        if (trimmedBody.startsWith("return ")) return m;
+        return `${label} return (<Fragment>${body}</Fragment>);`;
+      });
+      const replacement = `{(() => { __ROUND_SWITCH__(${cond}) { ${transformedContent} } })}`;
+      const before = result.substring(0, exprStart);
+      const after = result.substring(outer.end + 1);
+      result = before + replacement + after;
+    }
+    while (true) {
+      const match = result.match(/(^|[\n\r])\s*switch\s*\(/m);
+      if (!match) break;
+      const switchStart = match.index + match[0].lastIndexOf("switch");
+      const head = result.slice(switchStart);
+      const mm = head.match(/^switch\s*\((.*?)\)\s*\{/);
+      if (!mm) break;
+      const cond = mm[1];
+      const blockStart = switchStart + mm[0].length - 1;
+      const block = parseBlock(result, blockStart);
+      if (!block) break;
+      const content = result.substring(block.start + 1, block.end);
+      const transformedContent = content.replace(/(case\s+.*?:|default:)([\s\S]*?)(?=case\s+.*?:|default:|$)/g, (m, label, body) => {
+        const trimmedBody = body.trim();
+        if (!trimmedBody) return m;
+        if (trimmedBody.startsWith("return ")) return m;
+        return `${label} return (<Fragment>${body}</Fragment>);`;
+      });
+      const replacement = `{(() => { __ROUND_SWITCH__(${cond}) { ${transformedContent} } })}`;
+      const before = result.substring(0, switchStart);
       const after = result.substring(block.end + 1);
       result = before + replacement + after;
     }
@@ -352,7 +401,7 @@ function transform(code) {
   result = transformSuspenseBlocks(result);
   result = transformProviderBlocks(result);
   result = result.replace(/\{\s*([A-Za-z_$][\w$]*)\s*\(\s*\)\s*\}/g, "{() => $1()}").replace(/=\{\s*([A-Za-z_$][\w$]*)\s*\(\s*\)\s*\}/g, "={() => $1()}");
-  return result;
+  return result.replace(/__ROUND_SWITCH__/g, "switch");
 }
 function normalizePath(p) {
   return p.replaceAll("\\", "/");
