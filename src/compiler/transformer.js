@@ -1,38 +1,35 @@
 // Transformer for .round files
 // Handles custom syntax like:
 // {if(cond){ ... }} -> {cond ? (...) : null}
+// if(cond){ ... } (bare in JSX) -> {cond ? (...) : null}
 // {for(item in list){ ... }} -> {list.map(item => (...))}
+// {switch(cond) { case ... }} -> {function() { switch ... }}
 
-export function transform(code) {
-    // Process "if" blocks first, then "for" blocks (or vice versa, order matters if nested)
+export function transform(code, initialDepth = 0) {
+    let result = '';
+    let i = 0;
+    let jsxDepth = initialDepth;
 
-    // Helper to find balanced block starting at index
+    // --- Helpers ---
+
     function parseBlock(str, startIndex) {
         let open = 0;
         let startBlockIndex = -1;
-        let endBlockIndex = -1;
 
-        let inSingle = false;
-        let inDouble = false;
-        let inTemplate = false;
-        let inCommentLine = false;
-        let inCommentMulti = false;
+        let inSingle = false, inDouble = false, inTemplate = false;
+        let inCommentLine = false, inCommentMulti = false;
 
-        for (let i = startIndex; i < str.length; i++) {
-            const ch = str[i];
-            const prev = i > 0 ? str[i - 1] : '';
-            const next = i < str.length - 1 ? str[i + 1] : '';
+        for (let j = startIndex; j < str.length; j++) {
+            const ch = str[j];
+            const prev = j > 0 ? str[j - 1] : '';
+            const next = j < str.length - 1 ? str[j + 1] : '';
 
-            // Handle strings and comments
             if (inCommentLine) {
                 if (ch === '\n' || ch === '\r') inCommentLine = false;
                 continue;
             }
             if (inCommentMulti) {
-                if (ch === '*' && next === '/') {
-                    inCommentMulti = false;
-                    i++;
-                }
+                if (ch === '*' && next === '/') { inCommentMulti = false; j++; }
                 continue;
             }
             if (inTemplate) {
@@ -48,324 +45,340 @@ export function transform(code) {
                 continue;
             }
 
-            // Check for start of strings/comments
-            if (ch === '/' && next === '/') {
-                inCommentLine = true;
-                i++;
-                continue;
-            }
-            if (ch === '/' && next === '*') {
-                inCommentMulti = true;
-                i++;
-                continue;
-            }
-            if (ch === '`') {
-                inTemplate = true;
-                continue;
-            }
-            if (ch === '\'') {
-                inSingle = true;
-                continue;
-            }
-            if (ch === '"') {
-                inDouble = true;
-                continue;
-            }
+            if (ch === '/' && next === '/') { inCommentLine = true; j++; continue; }
+            if (ch === '/' && next === '*') { inCommentMulti = true; j++; continue; }
+            if (ch === '`') { inTemplate = true; continue; }
+            if (ch === '\'') { inSingle = true; continue; }
+            if (ch === '"') { inDouble = true; continue; }
 
             if (ch === '{') {
-                if (open === 0) startBlockIndex = i;
+                if (open === 0) startBlockIndex = j;
                 open++;
             } else if (ch === '}') {
                 open--;
                 if (open === 0) {
-                    endBlockIndex = i;
-                    return { start: startBlockIndex, end: endBlockIndex };
+                    return { start: startBlockIndex, end: j };
                 }
             }
         }
         return null;
     }
 
-    let result = code;
-
-    function consumeWhitespace(str, i) {
-        while (i < str.length && /\s/.test(str[i])) i++;
-        return i;
+    function consumeWhitespace(str, idx) {
+        while (idx < str.length && /\s/.test(str[idx])) idx++;
+        return idx;
     }
 
-    function parseIfChain(str, ifIndex) {
-        const head = str.slice(ifIndex);
-        const m = head.match(/^if\s*\((.*?)\)\s*\{/);
-        if (!m) return null;
+    function extractCondition(str, startIndex) {
+        if (str[startIndex] !== '(') return null;
+        let depth = 1;
+        let j = startIndex + 1;
+        let inSingle = false, inDouble = false, inTemplate = false;
 
-        let i = ifIndex;
-        const cases = [];
-        let elseContent = null;
+        while (j < str.length && depth > 0) {
+            const ch = str[j], prev = str[j - 1] || '';
+            if (!inDouble && !inTemplate && ch === '\'' && prev !== '\\') inSingle = !inSingle;
+            else if (!inSingle && !inTemplate && ch === '"' && prev !== '\\') inDouble = !inDouble;
+            else if (!inSingle && !inDouble && ch === '`' && prev !== '\\') inTemplate = !inTemplate;
 
-        while (true) {
-            const cur = str.slice(i);
-            const mm = cur.match(/^if\s*\((.*?)\)\s*\{/);
-            if (!mm) return null;
-            let cond = mm[1];
-
-            // Allow {if(signal){...}} where signal is a simple identifier/member path.
-            // For those cases, auto-unwrap signal-like values by calling them.
-            // Examples supported:
-            // - if(flags.showCounter){...}
-            // - if(user.loggedIn){...}
-            // Complex expressions are left untouched.
-            const trimmedCond = String(cond).trim();
-            const isSimplePath = /^[A-Za-z_$][\w$]*(\.[A-Za-z_$][\w$]*)*$/.test(trimmedCond);
-            if (isSimplePath && !trimmedCond.endsWith(')')) {
-                cond = `((typeof (${trimmedCond}) === 'function' && typeof (${trimmedCond}).peek === 'function' && ('value' in (${trimmedCond}))) ? (${trimmedCond})() : (${trimmedCond}))`;
+            if (!inSingle && !inDouble && !inTemplate) {
+                if (ch === '(') depth++;
+                else if (ch === ')') depth--;
             }
-            const blockStart = i + mm[0].length - 1;
-            const block = parseBlock(str, blockStart);
-            if (!block) return null;
+            j++;
+        }
+        if (depth !== 0) return null;
+        return { cond: str.substring(startIndex + 1, j - 1), end: j };
+    }
 
-            const content = str.substring(block.start + 1, block.end);
-            cases.push({ cond, content });
+    // --- Control Flow Handlers ---
 
-            i = block.end + 1;
-            i = consumeWhitespace(str, i);
-
-            if (!str.startsWith('else', i)) {
-                break;
-            }
-
-            i += 4;
-            i = consumeWhitespace(str, i);
-
-            if (str.startsWith('if', i)) {
-                continue;
-            }
-
-            if (str[i] !== '{') return null;
-            const elseBlock = parseBlock(str, i);
-            if (!elseBlock) return null;
-            elseContent = str.substring(elseBlock.start + 1, elseBlock.end);
-            i = elseBlock.end + 1;
-            break;
+    function handleIf(currI, isBare = false) {
+        // If bare, currI is at 'i' of 'if'. If not bare, currI is at '{'.
+        let startPtr = currI;
+        if (!isBare) {
+            startPtr = consumeWhitespace(code, currI + 1);
         }
 
-        const end = i;
+        // Strict verification
+        if (!code.startsWith('if', startPtr)) return null;
+
+        let ptr = startPtr + 2;
+        ptr = consumeWhitespace(code, ptr);
+        if (code[ptr] !== '(') return null;
+
+        const cases = [];
+        let elseContent = null;
+        let currentPtr = ptr;
+        let first = true;
+
+        while (true) {
+            if (!first) {
+                if (!code.startsWith('if', currentPtr)) break;
+                currentPtr += 2;
+                currentPtr = consumeWhitespace(code, currentPtr);
+            }
+            first = false;
+
+            const condRes = extractCondition(code, currentPtr);
+            if (!condRes) return null;
+
+            currentPtr = consumeWhitespace(code, condRes.end);
+            if (code[currentPtr] !== '{') return null;
+
+            const block = parseBlock(code, currentPtr);
+            if (!block) return null;
+
+            const rawContent = code.substring(block.start + 1, block.end);
+            // RECURSIVE: content wrapped in fragment, so depth=1
+            const transformedContent = transform(rawContent, 1);
+
+            cases.push({ cond: condRes.cond, content: transformedContent });
+
+            currentPtr = block.end + 1;
+            currentPtr = consumeWhitespace(code, currentPtr);
+
+            if (code.startsWith('else', currentPtr)) {
+                currentPtr += 4;
+                currentPtr = consumeWhitespace(code, currentPtr);
+                if (code.startsWith('if', currentPtr)) {
+                    continue;
+                } else if (code[currentPtr] === '{') {
+                    const elseBlock = parseBlock(code, currentPtr);
+                    if (!elseBlock) return null;
+                    const rawElse = code.substring(elseBlock.start + 1, elseBlock.end);
+                    elseContent = transform(rawElse, 1);
+                    currentPtr = elseBlock.end + 1;
+                    break;
+                } else {
+                    return null;
+                }
+            } else {
+                break;
+            }
+        }
+
+        // If not bare, consume closing '}'. If bare, we are done.
+        let endIdx = currentPtr;
+        if (!isBare) {
+            endIdx = consumeWhitespace(code, endIdx);
+            if (code[endIdx] !== '}') return null;
+            endIdx++;
+        }
 
         let expr = '';
         for (let idx = 0; idx < cases.length; idx++) {
             const c = cases[idx];
+            let cond = c.cond.trim();
+            const isSimplePath = /^[A-Za-z_$][\w$]*(\.[A-Za-z_$][\w$]*)*$/.test(cond);
+            if (isSimplePath && !cond.endsWith(')')) {
+                cond = `((typeof (${cond}) === 'function' && typeof (${cond}).peek === 'function' && ('value' in (${cond}))) ? (${cond})() : (${cond}))`;
+            }
             const body = `<Fragment>${c.content}</Fragment>`;
-            if (idx === 0) {
-                expr = `(${c.cond}) ? (${body}) : `;
-            } else {
-                expr += `(${c.cond}) ? (${body}) : `;
+            expr += `(${cond}) ? (${body}) : `;
+        }
+        expr += elseContent ? `(<Fragment>${elseContent}</Fragment>)` : 'null';
+
+        // Always wrap in Thunk `{(() => ...)}`
+        return { end: endIdx, replacement: `{(() => ${expr})}` };
+    }
+
+    function handleFor(currI, isBare = false) {
+        let ptr = currI;
+        if (!isBare) ptr = consumeWhitespace(code, currI + 1);
+
+        if (!code.startsWith('for', ptr)) return null;
+        ptr += 3;
+        ptr = consumeWhitespace(code, ptr);
+
+        const condRes = extractCondition(code, ptr);
+        if (!condRes) return null;
+
+        const forCond = condRes.cond;
+        const inMatch = forCond.match(/^\s*(\S+)\s+in\s+(.+)$/);
+        if (!inMatch) return null;
+
+        const item = inMatch[1].trim();
+        const list = inMatch[2].trim();
+
+        ptr = consumeWhitespace(code, condRes.end);
+        if (code[ptr] !== '{') return null;
+
+        const block = parseBlock(code, ptr);
+        if (!block) return null;
+
+        const rawContent = code.substring(block.start + 1, block.end);
+        const transformedContent = transform(rawContent, 1);
+
+        let endIdx = block.end + 1;
+        if (!isBare) {
+            endIdx = consumeWhitespace(code, endIdx);
+            if (code[endIdx] !== '}') return null;
+            endIdx++;
+        }
+
+        const replacement = `{(() => ${list}.map(${item} => (<Fragment>${transformedContent}</Fragment>)))}`;
+        return { end: endIdx, replacement };
+    }
+
+    function handleSwitch(currI, isBare = false) {
+        let ptr = currI;
+        if (!isBare) ptr = consumeWhitespace(code, currI + 1);
+
+        if (!code.startsWith('switch', ptr)) return null;
+        ptr += 6;
+        ptr = consumeWhitespace(code, ptr);
+
+        const condRes = extractCondition(code, ptr);
+        if (!condRes) return null;
+        const cond = condRes.cond;
+
+        ptr = consumeWhitespace(code, condRes.end);
+        if (code[ptr] !== '{') return null;
+
+        const block = parseBlock(code, ptr);
+        if (!block) return null;
+
+        const rawContent = code.substring(block.start + 1, block.end);
+        const transformedInner = transform(rawContent, 0);
+
+        const finalContent = transformedInner.replace(/(case\s+.*?:|default:)([\s\S]*?)(?=case\s+.*?:|default:|$)/g, (m, label, body) => {
+            const trimmed = body.trim();
+            if (!trimmed) return m;
+            if (trimmed.startsWith('return ')) return m;
+            return `${label} return (<Fragment>${body}</Fragment>);`;
+        });
+
+        let endIdx = block.end + 1;
+        if (!isBare) {
+            endIdx = consumeWhitespace(code, endIdx);
+            if (code[endIdx] !== '}') return null;
+            endIdx++;
+        }
+
+        // Fix Reactivity: Return a function (Thunk) instead of IIFE result
+        // { function() { ... } }
+        const replacement = `{function() { __ROUND_SWITCH_TOKEN__(${cond}) { ${finalContent} } }}`;
+        return { end: endIdx, replacement };
+    }
+
+    // --- Main Parser Loop ---
+
+    let inSingle = false, inDouble = false, inTemplate = false;
+    let inCommentLine = false, inCommentMulti = false;
+
+    while (i < code.length) {
+        const ch = code[i];
+        const next = i < code.length - 1 ? code[i + 1] : '';
+        const prev = i > 0 ? code[i - 1] : '';
+
+        if (inCommentLine) {
+            result += ch;
+            if (ch === '\n' || ch === '\r') inCommentLine = false;
+            i++; continue;
+        }
+        if (inCommentMulti) {
+            result += ch;
+            if (ch === '*' && next === '/') { inCommentMulti = false; result += '/'; i += 2; continue; }
+            i++; continue;
+        }
+        if (inTemplate) {
+            result += ch;
+            if (ch === '`' && prev !== '\\') inTemplate = false;
+            i++; continue;
+        }
+        if (inSingle) {
+            result += ch;
+            if (ch === '\'' && prev !== '\\') inSingle = false;
+            i++; continue;
+        }
+        if (inDouble) {
+            result += ch;
+            if (ch === '"' && prev !== '\\') inDouble = false;
+            i++; continue;
+        }
+
+        if (ch === '/' && next === '/') { inCommentLine = true; result += '//'; i += 2; continue; }
+        if (ch === '/' && next === '*') { inCommentMulti = true; result += '/*'; i += 2; continue; }
+        if (ch === '`') { inTemplate = true; result += ch; i++; continue; }
+        if (ch === '\'') { inSingle = true; result += ch; i++; continue; }
+        if (ch === '"') { inDouble = true; result += ch; i++; continue; }
+
+        if (ch === '<') {
+            const isTag = /[a-zA-Z0-9_$]/.test(next) || next === '>';
+            if (isTag) jsxDepth++;
+        }
+
+        if (ch === '<' && next === '/') {
+            if (jsxDepth > 0) jsxDepth--;
+        }
+        if (ch === '/' && next === '>') {
+            if (jsxDepth > 0) jsxDepth--;
+        }
+
+        if (jsxDepth > 0) {
+            let processed = false;
+
+            // 1. Handlers for { control }
+            if (ch === '{') {
+                let ptr = consumeWhitespace(code, i + 1);
+                if (code.startsWith('if', ptr)) {
+                    const res = handleIf(i, false);
+                    if (res) { result += res.replacement; i = res.end; processed = true; }
+                } else if (code.startsWith('for', ptr)) {
+                    const res = handleFor(i, false);
+                    if (res) { result += res.replacement; i = res.end; processed = true; }
+                } else if (code.startsWith('switch', ptr)) {
+                    const res = handleSwitch(i, false);
+                    if (res) { result += res.replacement; i = res.end; processed = true; }
+                }
             }
-        }
-        if (elseContent !== null) {
-            expr += `(<Fragment>${elseContent}</Fragment>)`;
-        } else {
-            expr += 'null';
-        }
 
-        const replacement = `(() => ${expr})`;
-        return { start: ifIndex, end, replacement };
-    }
-
-    function parseIfStatement(str, ifIndex) {
-        if (!str.startsWith('if', ifIndex)) return null;
-        const chain = parseIfChain(str, ifIndex);
-        if (!chain) return null;
-        return {
-            start: chain.start,
-            end: chain.end,
-            replacement: `{${chain.replacement}}`
-        };
-    }
-
-    function parseIfExpression(str, exprStart) {
-        if (str[exprStart] !== '{') return null;
-
-        let i = consumeWhitespace(str, exprStart + 1);
-        if (!str.startsWith('if', i)) return null;
-
-        const outer = parseBlock(str, exprStart);
-        if (!outer) return null;
-
-        const chain = parseIfChain(str, i);
-        if (!chain) return null;
-
-        return {
-            start: exprStart,
-            end: outer.end + 1,
-            replacement: `{${chain.replacement}}`
-        };
-    }
-
-    let prev = null;
-    while (prev !== result) {
-        prev = result;
-
-        while (true) {
-            const match = result.match(/\{\s*if\s*\(/);
-            if (!match) break;
-            const matchIndex = match.index;
-
-            const parsed = parseIfExpression(result, matchIndex);
-            if (!parsed) {
-                console.warn('Unbalanced IF expression found, skipping transformation.');
-                break;
+            // 2. Handlers for bare control flow (implicit nesting)
+            // Strict check: must look like "if (" inside a code block
+            else if (ch === 'i' && code.startsWith('if', i)) {
+                // Verify it is followed by (
+                let ptr = consumeWhitespace(code, i + 2);
+                if (code[ptr] === '(') {
+                    const res = handleIf(i, true);
+                    if (res) { result += res.replacement; i = res.end; processed = true; }
+                }
+            } else if (ch === 'f' && code.startsWith('for', i)) {
+                let ptr = consumeWhitespace(code, i + 3);
+                if (code[ptr] === '(') {
+                    const res = handleFor(i, true);
+                    if (res) { result += res.replacement; i = res.end; processed = true; }
+                }
+            } else if (ch === 's' && code.startsWith('switch', i)) {
+                let ptr = consumeWhitespace(code, i + 6);
+                if (code[ptr] === '(') {
+                    const res = handleSwitch(i, true);
+                    if (res) { result += res.replacement; i = res.end; processed = true; }
+                }
             }
 
-            const before = result.substring(0, parsed.start);
-            const after = result.substring(parsed.end);
-            result = before + parsed.replacement + after;
+            if (processed) continue;
         }
 
-        while (true) {
-            const match = result.match(/(^|[\n\r])\s*if\s*\(/m);
-            if (!match) break;
-            const ifIndex = match.index + match[0].lastIndexOf('if');
-
-            const parsed = parseIfStatement(result, ifIndex);
-            if (!parsed) break;
-
-            const before = result.substring(0, parsed.start);
-            const after = result.substring(parsed.end);
-            result = before + parsed.replacement + after;
-        }
-
-        while (true) {
-            const match = result.match(/\{\s*for\s*\((.*?)\s+in\s+(.*?)\)\s*\{/);
-            if (!match) break;
-
-            const item = match[1];
-            const list = match[2];
-            const exprStart = match.index;
-
-            const outer = parseBlock(result, exprStart);
-            if (!outer) break;
-
-            let i = consumeWhitespace(result, exprStart + 1);
-            const head = result.slice(i);
-            const mm = head.match(/^for\s*\((.*?)\s+in\s+(.*?)\)\s*\{/);
-            if (!mm) break;
-            const forStart = i;
-            const blockStart = forStart + mm[0].length - 1;
-            const block = parseBlock(result, blockStart);
-            if (!block) break;
-
-            const content = result.substring(block.start + 1, block.end);
-            const replacement = `{(() => ${list}.map(${item} => (<Fragment>${content}</Fragment>)))}`;
-
-            const before = result.substring(0, exprStart);
-            const after = result.substring(outer.end + 1);
-
-            result = before + replacement + after;
-        }
-
-        while (true) {
-            const match = result.match(/(^|[\n\r])\s*for\s*\((.*?)\s+in\s+(.*?)\)\s*\{/m);
-            if (!match) break;
-
-            const exprStart = match.index + match[0].lastIndexOf('for');
-            const item = match[2];
-            const list = match[3];
-
-            const forHead = result.slice(exprStart);
-            const mm = forHead.match(/^for\s*\((.*?)\s+in\s+(.*?)\)\s*\{/);
-            if (!mm) break;
-
-            const blockStart = exprStart + mm[0].length - 1;
-            const block = parseBlock(result, blockStart);
-            if (!block) break;
-
-            const content = result.substring(block.start + 1, block.end);
-            const replacement = `{(() => ${list}.map(${item} => (<Fragment>${content}</Fragment>)))}`;
-
-            const before = result.substring(0, exprStart);
-            const after = result.substring(block.end + 1);
-            result = before + replacement + after;
-        }
-
-        while (true) {
-            const match = result.match(/\{\s*switch\s*\(/);
-            if (!match) break;
-            const exprStart = match.index;
-
-            const outer = parseBlock(result, exprStart);
-            if (!outer) break;
-
-            let i = consumeWhitespace(result, exprStart + 1);
-            const head = result.slice(i);
-            const mm = head.match(/^switch\s*\((.*?)\)\s*\{/);
-            if (!mm) break;
-            const cond = mm[1];
-            const blockStart = i + mm[0].length - 1;
-            const block = parseBlock(result, blockStart);
-            if (!block) break;
-
-            const content = result.substring(block.start + 1, block.end);
-            const transformedContent = content.replace(/(case\s+.*?:|default:)([\s\S]*?)(?=case\s+.*?:|default:|$)/g, (m, label, body) => {
-                const trimmedBody = body.trim();
-                if (!trimmedBody) return m;
-                if (trimmedBody.startsWith('return ')) return m;
-                return `${label} return (<Fragment>${body}</Fragment>);`;
-            });
-
-            const replacement = `{(() => { __ROUND_SWITCH__(${cond}) { ${transformedContent} } })}`;
-
-            const before = result.substring(0, exprStart);
-            const after = result.substring(outer.end + 1);
-            result = before + replacement + after;
-        }
-
-        while (true) {
-            const match = result.match(/(^|[\n\r])\s*switch\s*\(/m);
-            if (!match) break;
-            const switchStart = match.index + match[0].lastIndexOf('switch');
-
-            const head = result.slice(switchStart);
-            const mm = head.match(/^switch\s*\((.*?)\)\s*\{/);
-            if (!mm) break;
-            const cond = mm[1];
-            const blockStart = switchStart + mm[0].length - 1;
-            const block = parseBlock(result, blockStart);
-            if (!block) break;
-
-            const content = result.substring(block.start + 1, block.end);
-            const transformedContent = content.replace(/(case\s+.*?:|default:)([\s\S]*?)(?=case\s+.*?:|default:|$)/g, (m, label, body) => {
-                const trimmedBody = body.trim();
-                if (!trimmedBody) return m;
-                if (trimmedBody.startsWith('return ')) return m;
-                return `${label} return (<Fragment>${body}</Fragment>);`;
-            });
-
-            const replacement = `{(() => { __ROUND_SWITCH__(${cond}) { ${transformedContent} } })}`;
-
-            const before = result.substring(0, switchStart);
-            const after = result.substring(block.end + 1);
-            result = before + replacement + after;
-        }
+        result += ch;
+        i++;
     }
+
+    // --- Helpers for global transforms ---
 
     function findJsxTagEnd(str, startIndex) {
-        let inSingle = false;
-        let inDouble = false;
-        let inTemplate = false;
+        let inSingle = false, inDouble = false, inTemplate = false;
         let braceDepth = 0;
-
-        for (let i = startIndex; i < str.length; i++) {
-            const ch = str[i];
-            const prevCh = i > 0 ? str[i - 1] : '';
-
-            if (!inDouble && !inTemplate && ch === '\'' && prevCh !== '\\') inSingle = !inSingle;
-            else if (!inSingle && !inTemplate && ch === '"' && prevCh !== '\\') inDouble = !inDouble;
-            else if (!inSingle && !inDouble && ch === '`' && prevCh !== '\\') inTemplate = !inTemplate;
-
+        for (let k = startIndex; k < str.length; k++) {
+            const c = str[k];
+            const p = k > 0 ? str[k - 1] : '';
+            if (!inDouble && !inTemplate && c === '\'' && p !== '\\') inSingle = !inSingle;
+            else if (!inSingle && !inTemplate && c === '"' && p !== '\\') inDouble = !inDouble;
+            else if (!inSingle && !inDouble && c === '`' && p !== '\\') inTemplate = !inTemplate;
             if (inSingle || inDouble || inTemplate) continue;
-
-            if (ch === '{') braceDepth++;
-            else if (ch === '}') braceDepth = Math.max(0, braceDepth - 1);
-            else if (ch === '>' && braceDepth === 0) return i;
+            if (c === '{') braceDepth++;
+            else if (c === '}') braceDepth = Math.max(0, braceDepth - 1);
+            else if (c === '>' && braceDepth === 0) return k;
         }
         return -1;
     }
@@ -378,48 +391,20 @@ export function transform(code) {
             if (openIndex === -1) break;
             const openEnd = findJsxTagEnd(out, openIndex);
             if (openEnd === -1) break;
-
             const openTagText = out.slice(openIndex, openEnd + 1);
-            if (/\/>\s*$/.test(openTagText)) {
-                cursor = openEnd + 1;
-                continue;
-            }
-
-            let depth = 1;
-            let i = openEnd + 1;
-            let closeStart = -1;
-            while (i < out.length) {
-                const nextOpen = out.indexOf('<Suspense', i);
-                const nextClose = out.indexOf('</Suspense>', i);
-                if (nextClose === -1) break;
-                if (nextOpen !== -1 && nextOpen < nextClose) {
-                    const innerOpenEnd = findJsxTagEnd(out, nextOpen);
-                    if (innerOpenEnd === -1) break;
-                    const innerOpenText = out.slice(nextOpen, innerOpenEnd + 1);
-                    if (!/\/>\s*$/.test(innerOpenText)) depth++;
-                    i = innerOpenEnd + 1;
-                    continue;
-                }
-
-                depth--;
-                if (depth === 0) {
-                    closeStart = nextClose;
-                    break;
-                }
-                i = nextClose + '</Suspense>'.length;
+            if (/\/>\s*$/.test(openTagText)) { cursor = openEnd + 1; continue; }
+            let depth = 1, k = openEnd + 1, closeStart = -1;
+            while (k < out.length) {
+                if (out.slice(k).startsWith('<Suspense')) { depth++; k += 9; }
+                else if (out.slice(k).startsWith('</Suspense>')) {
+                    depth--; if (depth === 0) { closeStart = k; break; } k += 11;
+                } else k++;
             }
             if (closeStart === -1) break;
-
             const inner = out.slice(openEnd + 1, closeStart);
-            const innerTrim = inner.trim();
-            if (innerTrim.startsWith('{() =>')) {
-                cursor = closeStart + '</Suspense>'.length;
-                continue;
-            }
-
-            const wrapped = `{() => (<Fragment>${inner}</Fragment>)}`;
+            const wrapped = `{(() => (<Fragment>${inner}</Fragment>))}`;
             out = out.slice(0, openEnd + 1) + wrapped + out.slice(closeStart);
-            cursor = closeStart + wrapped.length + '</Suspense>'.length;
+            cursor = closeStart + wrapped.length + 11;
         }
         return out;
     }
@@ -434,54 +419,29 @@ export function transform(code) {
             if (lt === -1) break;
             const openEnd = findJsxTagEnd(out, lt);
             if (openEnd === -1) break;
-
-            const openTagText = out.slice(lt, openEnd + 1);
-            if (/\/>\s*$/.test(openTagText)) {
-                cursor = openEnd + 1;
-                continue;
-            }
-
-            const m = openTagText.match(/^<\s*([A-Za-z_$][\w$]*\.Provider)\b/);
-            if (!m) {
-                cursor = openEnd + 1;
-                continue;
-            }
+            const tagText = out.slice(lt, openEnd + 1);
+            if (/\/>\s*$/.test(tagText)) { cursor = openEnd + 1; continue; }
+            const m = tagText.match(/^<\s*([A-Za-z_$][\w$]*\.Provider)\b/);
+            if (!m) { cursor = openEnd + 1; continue; }
             const tagName = m[1];
             const closeTag = `</${tagName}>`;
-
-            let depth = 1;
-            let i = openEnd + 1;
-            let closeStart = -1;
-            while (i < out.length) {
-                const nextOpen = out.indexOf(`<${tagName}`, i);
-                const nextClose = out.indexOf(closeTag, i);
-                if (nextClose === -1) break;
-                if (nextOpen !== -1 && nextOpen < nextClose) {
-                    const innerOpenEnd = findJsxTagEnd(out, nextOpen);
-                    if (innerOpenEnd === -1) break;
-                    const innerOpenText = out.slice(nextOpen, innerOpenEnd + 1);
-                    if (!/\/>\s*$/.test(innerOpenText)) depth++;
-                    i = innerOpenEnd + 1;
-                    continue;
+            let depth = 1, k = openEnd + 1, closeStart = -1;
+            while (k < out.length) {
+                const nOpen = out.indexOf(`<${tagName}`, k);
+                const nClose = out.indexOf(closeTag, k);
+                if (nClose === -1) break;
+                if (nOpen !== -1 && nOpen < nClose) {
+                    const innerEnd = findJsxTagEnd(out, nOpen);
+                    if (innerEnd !== -1 && !/\/>\s*$/.test(out.slice(nOpen, innerEnd + 1))) depth++;
+                    k = innerEnd + 1; continue;
                 }
-
                 depth--;
-                if (depth === 0) {
-                    closeStart = nextClose;
-                    break;
-                }
-                i = nextClose + closeTag.length;
+                if (depth === 0) { closeStart = nClose; break; }
+                k = nClose + closeTag.length;
             }
             if (closeStart === -1) break;
-
             const inner = out.slice(openEnd + 1, closeStart);
-            const innerTrim = inner.trim();
-            if (innerTrim.startsWith('{() =>')) {
-                cursor = closeStart + closeTag.length;
-                continue;
-            }
-
-            const wrapped = `{() => (<Fragment>${inner}</Fragment>)}`;
+            const wrapped = `{(() => (<Fragment>${inner}</Fragment>))}`;
             out = out.slice(0, openEnd + 1) + wrapped + out.slice(closeStart);
             cursor = closeStart + wrapped.length + closeTag.length;
         }
@@ -491,13 +451,9 @@ export function transform(code) {
     result = transformSuspenseBlocks(result);
     result = transformProviderBlocks(result);
 
-    // Make `signal()` reactive in JSX by passing a function to the runtime.
-    // `{count()}` -> `{() => count()}``
-    // `value={count()}` -> `value={() => count()}``
-    // This is intentionally limited to zero-arg identifier calls.
     result = result
         .replace(/\{\s*([A-Za-z_$][\w$]*)\s*\(\s*\)\s*\}/g, '{() => $1()}')
-        .replace(/=\{\s*([A-Za-z_$][\w$]*)\s*\(\s*\)\s*\}/g, '={' + '() => $1()}'); // Note: break string to avoid own regex matching if needed
+        .replace(/=\{\s*([A-Za-z_$][\w$]*)\s*\(\s*\)\s*\}/g, '={' + '() => $1()}');
 
-    return result.replace(/__ROUND_SWITCH__/g, 'switch');
+    return result.replace(/__ROUND_SWITCH_TOKEN__/g, 'switch');
 }

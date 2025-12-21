@@ -37,16 +37,19 @@
     },
     "if-block": {
       "name": "meta.round.controlflow.if",
-      "begin": "(\\{)\\s*(if)",
+      "begin": "(\\{)\\s*(if)\\s*(\\()",
       "beginCaptures": {
         "1": {
           "name": "punctuation.section.embedded.begin.round"
         },
         "2": {
           "name": "keyword.control.round"
+        },
+        "3": {
+          "name": "punctuation.definition.parameters.begin.round"
         }
       },
-      "end": "(\\})\\s*(\\})",
+      "end": "(\\})(\\})",
       "endCaptures": {
         "1": {
           "name": "punctuation.section.block.end.round"
@@ -57,13 +60,16 @@
       },
       "patterns": [
         {
-          "include": "#condition-header"
+          "include": "#if-condition"
         },
         {
           "include": "#elseif-branch"
         },
         {
           "include": "#else-branch"
+        },
+        {
+          "include": "#nested-braces"
         },
         {
           "include": "#control-flow"
@@ -76,18 +82,38 @@
         }
       ]
     },
+    "if-condition": {
+      "begin": "(?<=\\()",
+      "end": "(\\))\\s*(\\{)",
+      "endCaptures": {
+        "1": {
+          "name": "punctuation.definition.parameters.end.round"
+        },
+        "2": {
+          "name": "punctuation.section.block.begin.round"
+        }
+      },
+      "patterns": [
+        {
+          "include": "source.js.jsx"
+        }
+      ]
+    },
     "for-block": {
       "name": "meta.round.controlflow.for",
-      "begin": "(\\{)\\s*(for)",
+      "begin": "(\\{)\\s*(for)\\s*(\\()",
       "beginCaptures": {
         "1": {
           "name": "punctuation.section.embedded.begin.round"
         },
         "2": {
           "name": "keyword.control.round"
+        },
+        "3": {
+          "name": "punctuation.definition.parameters.begin.round"
         }
       },
-      "end": "(\\})\\s*(\\})",
+      "end": "(\\})(\\})",
       "endCaptures": {
         "1": {
           "name": "punctuation.section.block.end.round"
@@ -98,36 +124,59 @@
       },
       "patterns": [
         {
-          "begin": "(\\()",
-          "beginCaptures": {
-            "1": {
-              "name": "punctuation.definition.parameters.begin.round"
-            }
-          },
-          "end": "(\\))\\s*(\\{)",
-          "endCaptures": {
-            "1": {
-              "name": "punctuation.definition.parameters.end.round"
-            },
-            "2": {
-              "name": "punctuation.section.block.begin.round"
-            }
-          },
-          "patterns": [
-            {
-              "match": "\\b(in|of)\\b",
-              "name": "keyword.control.round"
-            },
-            {
-              "include": "source.js.jsx"
-            }
-          ]
+          "include": "#for-header"
+        },
+        {
+          "include": "#nested-braces"
         },
         {
           "include": "#control-flow"
         },
         {
           "include": "#round-jsx"
+        },
+        {
+          "include": "source.js.jsx"
+        }
+      ]
+    },
+    "for-header": {
+      "begin": "(?<=\\()",
+      "end": "(\\))\\s*(\\{)",
+      "endCaptures": {
+        "1": {
+          "name": "punctuation.definition.parameters.end.round"
+        },
+        "2": {
+          "name": "punctuation.section.block.begin.round"
+        }
+      },
+      "patterns": [
+        {
+          "match": "\\b(in|of)\\b",
+          "name": "keyword.control.round"
+        },
+        {
+          "include": "source.js.jsx"
+        }
+      ]
+    },
+    "nested-braces": {
+      "begin": "(\\{)(?!\\s*(?:if|for|switch)\\s*\\()",
+      "beginCaptures": {
+        "1": {
+          "name": "punctuation.section.embedded.begin.js"
+        }
+      },
+      "end": "(\\})(?!\\})",
+      "endCaptures": {
+        "1": {
+          "name": "punctuation.section.embedded.end.js"
+        }
+      },
+      "patterns": [
+        {
+          "include": "#nested-braces"
         },
         {
           "include": "source.js.jsx"
