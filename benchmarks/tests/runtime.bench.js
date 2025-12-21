@@ -1,7 +1,10 @@
 import { bench, describe } from 'vitest';
 import { signal, effect, createElement } from 'round-core';
-import React from 'react';
+import { signal as preactSignal, effect as preactEffect } from '@preact/signals-core';
+import React, { useState } from 'react';
+import { createRoot } from 'react-dom/client';
 import ReactDOMServer from 'react-dom/server';
+import { flushSync } from 'react-dom';
 
 describe('Component Creation (1000 items)', () => {
     bench('Round: Create and Replcae 1000 rows', () => {
@@ -28,24 +31,51 @@ describe('Component Creation (1000 items)', () => {
             );
         }
 
-        // Using renderToString because createRoot/flushSync is unstable in this headless bench.
-        // This measures pure React rendering/templating overhead.
         ReactDOMServer.renderToString(React.createElement(List));
     });
 });
 
-describe('Reactivity (Signal vs State)', () => {
-    bench('Round: Signal Update', () => {
+describe('Reactivity (Signal vs Signal vs State)', () => {
+    bench('Round: Signal Update (Single)', () => {
         const count = signal(0);
         let dummy;
         const dispose = effect(() => {
             dummy = count();
         });
         count(1);
-        count(2);
         dispose();
     });
 
-    // React hooks require a component, so hard to bench pure state speed in isolation
-    // without full render cycle overhead.
+    bench('Preact: Signal Update (Single)', () => {
+        const count = preactSignal(0);
+        let dummy;
+        const dispose = preactEffect(() => {
+            dummy = count.value;
+        });
+        count.value = 1;
+        dispose();
+    });
+
+    bench('React: State Update (via Component + flushSync)', () => {
+        const container = document.createElement('div');
+        let setter;
+        function Test() {
+            const [val, setVal] = useState(0);
+            setter = setVal;
+            return React.createElement('div', null, val);
+        }
+
+        const root = createRoot(container);
+        // Initial render
+        flushSync(() => {
+            root.render(React.createElement(Test));
+        });
+
+        // The actual update we want to measure
+        flushSync(() => {
+            setter(1);
+        });
+
+        root.unmount();
+    });
 });

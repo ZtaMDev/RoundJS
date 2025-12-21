@@ -37,13 +37,11 @@ function onMount(fn) {
   if (component) {
     component.mountHooks.push(fn);
   } else {
-    setTimeout(() => {
-      try {
-        fn();
-      } catch (e) {
-        reportErrorSafe(e, { phase: "onMount" });
-      }
-    }, 0);
+    try {
+      fn();
+    } catch (e) {
+      reportErrorSafe(e, { phase: "onMount" });
+    }
   }
 }
 function onUnmount(fn) {
@@ -145,135 +143,180 @@ const Lifecycle = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.definePro
   triggerUpdate,
   unmountComponent
 }, Symbol.toStringTag, { value: "Module" }));
-let context = [];
+let context = null;
+let batchCount = 0;
+let pendingEffects = [];
+let globalVersion = 0;
 function isPromiseLike$2(v) {
   return v && (typeof v === "object" || typeof v === "function") && typeof v.then === "function";
 }
-function subscribe(running, subscriptions) {
-  subscriptions.add(running);
-  running.dependencies.add(subscriptions);
+function isSignalLike(v) {
+  return typeof v === "function" && typeof v.peek === "function" && "value" in v;
 }
 function untrack(fn) {
-  context.push(null);
+  const prev = context;
+  context = null;
   try {
     return typeof fn === "function" ? fn() : void 0;
   } finally {
-    context.pop();
+    context = prev;
+  }
+}
+function batch(fn) {
+  batchCount++;
+  try {
+    return fn();
+  } finally {
+    if (--batchCount === 0) {
+      const effects = pendingEffects;
+      pendingEffects = [];
+      for (let i = 0; i < effects.length; i++) {
+        effects[i].queued = false;
+        effects[i].run();
+      }
+    }
+  }
+}
+function subscribe(sub, dep) {
+  let link = sub.deps;
+  while (link) {
+    if (link.dep === dep) return;
+    link = link.nextDep;
+  }
+  link = {
+    sub,
+    dep,
+    nextSub: dep.subs,
+    prevSub: null,
+    nextDep: sub.deps,
+    prevDep: null
+  };
+  if (dep.subs) dep.subs.prevSub = link;
+  dep.subs = link;
+  if (sub.deps) sub.deps.prevDep = link;
+  sub.deps = link;
+}
+function cleanup(sub) {
+  let link = sub.deps;
+  while (link) {
+    const { dep, prevSub, nextSub } = link;
+    if (prevSub) prevSub.nextSub = nextSub;
+    else dep.subs = nextSub;
+    if (nextSub) nextSub.prevSub = prevSub;
+    link = link.nextDep;
+  }
+  sub.deps = null;
+}
+function notify(dep) {
+  let link = dep.subs;
+  while (link) {
+    const sub = link.sub;
+    if (sub.isComputed) {
+      sub.version = -1;
+      notify(sub);
+    } else {
+      if (batchCount > 0) {
+        if (!sub.queued) {
+          sub.queued = true;
+          pendingEffects.push(sub);
+        }
+      } else {
+        sub.run();
+      }
+    }
+    link = link.nextSub;
   }
 }
 function effect(arg1, arg2, arg3) {
-  let callback;
-  let explicitDeps = null;
-  let options = { onLoad: true };
+  let callback, explicitDeps = null, options = { onLoad: true };
   let owner = getCurrentComponent();
   if (typeof arg1 === "function") {
     callback = arg1;
-    if (arg2 && typeof arg2 === "object") {
-      options = { ...options, ...arg2 };
-    }
+    if (arg2 && typeof arg2 === "object") options = { ...options, ...arg2 };
   } else {
     explicitDeps = arg1;
     callback = arg2;
-    if (arg3 && typeof arg3 === "object") {
-      options = { ...options, ...arg3 };
-    }
+    if (arg3 && typeof arg3 === "object") options = { ...options, ...arg3 };
   }
-  const execute = () => {
-    if (typeof execute._cleanup === "function") {
-      try {
-        execute._cleanup();
-      } catch (e) {
-        const name = owner ? owner.name ?? "Anonymous" : null;
-        reportErrorSafe(e, { phase: "effect.cleanup", component: name });
-      }
-      execute._cleanup = null;
-    }
-    cleanup(execute);
-    context.push(execute);
-    try {
-      if (explicitDeps) {
-        if (Array.isArray(explicitDeps)) {
-          explicitDeps.forEach((dep) => {
-            if (typeof dep === "function") dep();
-          });
-        } else if (typeof explicitDeps === "function") {
-          explicitDeps();
+  const sub = {
+    deps: null,
+    queued: false,
+    run() {
+      if (this._cleanup) {
+        try {
+          this._cleanup();
+        } catch (e) {
+          reportErrorSafe(e, { phase: "effect.cleanup", component: owner?.name });
         }
+        this._cleanup = null;
       }
-      if (typeof callback === "function") {
+      cleanup(this);
+      const prev = context;
+      context = this;
+      try {
+        if (explicitDeps) {
+          if (Array.isArray(explicitDeps)) {
+            for (let i = 0; i < explicitDeps.length; i++) {
+              const d = explicitDeps[i];
+              if (typeof d === "function") d();
+            }
+          } else if (typeof explicitDeps === "function") {
+            explicitDeps();
+          }
+        }
         const res = callback();
-        if (typeof res === "function") {
-          execute._cleanup = res;
-        }
-      }
-      if (owner && owner.isMounted) triggerUpdate(owner);
-    } catch (e) {
-      if (isPromiseLike$2(e)) throw e;
-      const name = owner ? owner.name ?? "Anonymous" : null;
-      reportErrorSafe(e, { phase: "effect", component: name });
-    } finally {
-      context.pop();
-    }
-  };
-  execute.dependencies = /* @__PURE__ */ new Set();
-  execute._cleanup = null;
-  if (options.onLoad) {
-    onMount(execute);
-  } else {
-    execute();
-  }
-  return () => {
-    if (typeof execute._cleanup === "function") {
-      try {
-        execute._cleanup();
+        if (typeof res === "function") this._cleanup = res;
+        if (owner?.isMounted) triggerUpdate(owner);
       } catch (e) {
-        const name = owner ? owner.name ?? "Anonymous" : null;
-        reportErrorSafe(e, { phase: "effect.cleanup", component: name });
+        if (!isPromiseLike$2(e)) reportErrorSafe(e, { phase: "effect", component: owner?.name });
+        else throw e;
+      } finally {
+        context = prev;
       }
-    }
-    execute._cleanup = null;
-    cleanup(execute);
+    },
+    _cleanup: null
   };
-}
-function cleanup(running) {
-  running.dependencies.forEach((dep) => dep.delete(running));
-  running.dependencies.clear();
+  const dispose = () => {
+    if (sub._cleanup) {
+      try {
+        sub._cleanup();
+      } catch (e) {
+      }
+      sub._cleanup = null;
+    }
+    cleanup(sub);
+  };
+  if (options.onLoad) {
+    onMount(() => sub.run());
+  } else {
+    sub.run();
+  }
+  return dispose;
 }
 function defineBindMarkerIfNeeded(source, target) {
   if (source && source.bind === true) {
     try {
-      Object.defineProperty(target, "bind", {
-        enumerable: true,
-        configurable: false,
-        writable: false,
-        value: true
-      });
+      Object.defineProperty(target, "bind", { enumerable: true, value: true, configurable: true });
     } catch {
-      try {
-        target.bind = true;
-      } catch {
-      }
+      target.bind = true;
     }
   }
 }
 function attachHelpers(s) {
   if (!s || typeof s !== "function") return s;
   if (typeof s.transform === "function" && typeof s.validate === "function" && typeof s.$pick === "function") return s;
-  s.$pick = (p) => {
-    return pick(s, p);
-  };
+  s.$pick = (p) => pick(s, p);
   s.transform = (fromInput, toOutput) => {
     const fromFn = typeof fromInput === "function" ? fromInput : (v) => v;
     const toFn = typeof toOutput === "function" ? toOutput : (v) => v;
     const wrapped = function(...args) {
-      if (args.length > 0) {
-        return s(fromFn(args[0]));
-      }
+      if (args.length > 0) return s(fromFn(args[0]));
       return toFn(s());
     };
     wrapped.peek = () => toFn(s.peek());
     Object.defineProperty(wrapped, "value", {
       enumerable: true,
+      configurable: true,
       get() {
         return wrapped.peek();
       },
@@ -287,8 +330,8 @@ function attachHelpers(s) {
   s.validate = (validator, options = {}) => {
     const validateFn = typeof validator === "function" ? validator : null;
     const error = signal(null);
-    const validateOn = options && typeof options === "object" && typeof options.validateOn === "string" ? options.validateOn : "input";
-    const validateInitial = Boolean(options && typeof options === "object" && options.validateInitial);
+    const validateOn = options?.validateOn || "input";
+    const validateInitial = !!options?.validateInitial;
     const wrapped = function(...args) {
       if (args.length > 0) {
         const next = args[0];
@@ -303,11 +346,7 @@ function attachHelpers(s) {
             error(null);
             return s(next);
           }
-          if (typeof res === "string" && res.length) {
-            error(res);
-          } else {
-            error("Invalid value");
-          }
+          error(typeof res === "string" && res.length ? res : "Invalid value");
           return s.peek();
         }
         error(null);
@@ -331,13 +370,13 @@ function attachHelpers(s) {
         error(null);
         return true;
       }
-      if (typeof res === "string" && res.length) error(res);
-      else error("Invalid value");
+      error(typeof res === "string" && res.length ? res : "Invalid value");
       return false;
     };
     wrapped.peek = () => s.peek();
     Object.defineProperty(wrapped, "value", {
       enumerable: true,
+      configurable: true,
       get() {
         return wrapped.peek();
       },
@@ -359,66 +398,50 @@ function attachHelpers(s) {
   return s;
 }
 function signal(initialValue) {
-  let value = initialValue;
-  const subscriptions = /* @__PURE__ */ new Set();
-  const read = () => {
-    const running = context[context.length - 1];
-    if (running) {
-      subscribe(running, subscriptions);
-    }
-    return value;
+  const dep = {
+    value: initialValue,
+    version: 0,
+    subs: null
   };
-  const peek = () => value;
-  const write = (newValue) => {
-    if (value !== newValue) {
-      value = newValue;
-      [...subscriptions].forEach((sub) => sub());
+  const s = function(newValue) {
+    if (arguments.length > 0) {
+      if (dep.value !== newValue) {
+        dep.value = newValue;
+        dep.version = ++globalVersion;
+        notify(dep);
+      }
+      return dep.value;
     }
-    return value;
+    if (context) subscribe(context, dep);
+    return dep.value;
   };
-  const signal2 = function(...args) {
-    if (args.length > 0) {
-      return write(args[0]);
-    }
-    return read();
-  };
-  Object.defineProperty(signal2, "value", {
+  s.peek = () => dep.value;
+  Object.defineProperty(s, "value", {
     enumerable: true,
+    configurable: true,
     get() {
-      return peek();
+      return s();
     },
     set(v) {
-      write(v);
+      s(v);
     }
   });
-  signal2.peek = peek;
-  return attachHelpers(signal2);
+  return attachHelpers(s);
 }
 function bindable(initialValue) {
   const s = signal(initialValue);
   try {
-    Object.defineProperty(s, "bind", {
-      enumerable: true,
-      configurable: false,
-      writable: false,
-      value: true
-    });
+    Object.defineProperty(s, "bind", { enumerable: true, value: true, configurable: true });
   } catch {
-    try {
-      s.bind = true;
-    } catch {
-    }
+    s.bind = true;
   }
   return attachHelpers(s);
 }
-function isSignalLike(v) {
-  return typeof v === "function" && typeof v.peek === "function" && "value" in v;
-}
 function getIn(obj, path) {
   let cur = obj;
-  for (const key of path) {
+  for (let i = 0; i < path.length; i++) {
     if (cur == null) return void 0;
-    cur = cur[key];
+    cur = cur[path[i]];
   }
   return cur;
 }
@@ -445,9 +468,7 @@ function parsePath(path) {
   return [String(path)];
 }
 function pick(root, path) {
-  if (!isSignalLike(root)) {
-    throw new Error("[round] pick(root, path) expects root to be a signal (use bindable.object(...) or signal({...})).");
-  }
+  if (!isSignalLike(root)) throw new Error("[round] pick() expects a signal.");
   const pathArr = parsePath(path);
   const view = function(...args) {
     if (args.length > 0) {
@@ -460,6 +481,7 @@ function pick(root, path) {
   view.peek = () => getIn(root.peek(), pathArr);
   Object.defineProperty(view, "value", {
     enumerable: true,
+    configurable: true,
     get() {
       return view.peek();
     },
@@ -469,17 +491,9 @@ function pick(root, path) {
   });
   if (root.bind === true) {
     try {
-      Object.defineProperty(view, "bind", {
-        enumerable: true,
-        configurable: false,
-        writable: false,
-        value: true
-      });
+      Object.defineProperty(view, "bind", { enumerable: true, value: true, configurable: true });
     } catch {
-      try {
-        view.bind = true;
-      } catch {
-      }
+      view.bind = true;
     }
   }
   return view;
@@ -489,21 +503,14 @@ function createBindableObjectProxy(root, basePath) {
   const handler = {
     get(_target, prop) {
       if (prop === Symbol.toStringTag) return "BindableObject";
-      if (prop === Symbol.iterator) return void 0;
       if (prop === "peek") return () => basePath.length ? pick(root, basePath).peek() : root.peek();
       if (prop === "value") return basePath.length ? pick(root, basePath).peek() : root.peek();
       if (prop === "bind") return true;
       if (prop === "$pick") {
-        return (p) => {
-          const nextPath2 = basePath.concat(parsePath(p));
-          return createBindableObjectProxy(root, nextPath2);
-        };
+        return (p) => createBindableObjectProxy(root, basePath.concat(parsePath(p)));
       }
       if (prop === "_root") return root;
       if (prop === "_path") return basePath.slice();
-      if (prop === "call" || prop === "apply") {
-        return Reflect.get(_target, prop);
-      }
       const key = String(prop);
       const nextPath = basePath.concat(key);
       const cacheKey = nextPath.join(".");
@@ -535,44 +542,25 @@ function createBindableObjectProxy(root, basePath) {
       return true;
     },
     has(_target, prop) {
-      try {
-        if (Reflect.has(_target, prop)) return true;
-      } catch {
-      }
+      if (prop === "peek" || prop === "value" || prop === "bind" || prop === "$pick") return true;
       const v = basePath.length ? pick(root, basePath).peek() : root.peek();
       return v != null && Object.prototype.hasOwnProperty.call(v, prop);
     }
   };
   const fn = function(...args) {
-    if (args.length > 0) {
-      if (basePath.length) return pick(root, basePath)(args[0]);
-      return root(args[0]);
-    }
-    if (basePath.length) return pick(root, basePath)();
-    return root();
+    if (args.length > 0) return basePath.length ? pick(root, basePath)(args[0]) : root(args[0]);
+    return basePath.length ? pick(root, basePath)() : root();
   };
   fn.peek = () => basePath.length ? pick(root, basePath).peek() : root.peek();
-  Object.defineProperty(fn, "value", {
-    enumerable: true,
-    get() {
-      return fn.peek();
-    },
-    set(v) {
-      fn(v);
-    }
-  });
+  Object.defineProperty(fn, "value", { enumerable: true, configurable: true, get() {
+    return fn.peek();
+  }, set(v) {
+    fn(v);
+  } });
   try {
-    Object.defineProperty(fn, "bind", {
-      enumerable: true,
-      configurable: false,
-      writable: false,
-      value: true
-    });
+    Object.defineProperty(fn, "bind", { enumerable: true, value: true, configurable: true });
   } catch {
-    try {
-      fn.bind = true;
-    } catch {
-    }
+    fn.bind = true;
   }
   return new Proxy(fn, handler);
 }
@@ -581,14 +569,44 @@ bindable.object = function(initialObject = {}) {
   return createBindableObjectProxy(root, []);
 };
 function derive(fn) {
-  const derived = signal();
-  effect(() => {
-    derived(fn());
-  }, { onLoad: false });
-  return () => derived();
+  const dep = {
+    fn,
+    value: void 0,
+    version: -1,
+    depsVersion: -1,
+    subs: null,
+    deps: null,
+    isComputed: true,
+    run() {
+      cleanup(this);
+      const prev = context;
+      context = this;
+      try {
+        this.value = this.fn();
+        this.depsVersion = globalVersion;
+        this.version = ++globalVersion;
+      } finally {
+        context = prev;
+      }
+    }
+  };
+  const s = function() {
+    if (dep.version === -1 || dep.depsVersion < globalVersion) dep.run();
+    if (context) subscribe(context, dep);
+    return dep.value;
+  };
+  s.peek = () => {
+    if (dep.version === -1 || dep.depsVersion < globalVersion) dep.run();
+    return dep.value;
+  };
+  Object.defineProperty(s, "value", { enumerable: true, configurable: true, get() {
+    return s();
+  } });
+  return attachHelpers(s);
 }
 const Signals = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.defineProperty({
   __proto__: null,
+  batch,
   bindable,
   derive,
   effect,
@@ -1980,6 +1998,7 @@ export {
   Route,
   Suspense,
   SuspenseContext,
+  batch,
   bindContext,
   bindable,
   captureContext,

@@ -31,13 +31,11 @@ export function onMount(fn) {
     if (component) {
         component.mountHooks.push(fn);
     } else {
-        setTimeout(() => {
-            try {
-                fn();
-            } catch (e) {
-                reportErrorSafe(e, { phase: 'onMount' });
-            }
-        }, 0);
+        try {
+            fn();
+        } catch (e) {
+            reportErrorSafe(e, { phase: 'onMount' });
+        }
     }
 }
 

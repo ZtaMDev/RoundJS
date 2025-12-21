@@ -1,140 +1,182 @@
 import { onMount, triggerUpdate, getCurrentComponent } from './lifecycle.js';
 import { reportErrorSafe } from './error-reporter.js';
 
-let context = [];
+let context = null;
+let batchCount = 0;
+let pendingEffects = [];
+let globalVersion = 0;
 
 function isPromiseLike(v) {
     return v && (typeof v === 'object' || typeof v === 'function') && typeof v.then === 'function';
 }
 
-function subscribe(running, subscriptions) {
-    subscriptions.add(running);
-    running.dependencies.add(subscriptions);
+function isSignalLike(v) {
+    return typeof v === 'function' && typeof v.peek === 'function' && ('value' in v);
 }
 
 /**
  * Run a function without tracking any signals it reads.
- * Any signals accessed inside `fn` will not become dependencies of the current effect.
- * @template T
- * @param {() => T} fn The function to execute.
- * @returns {T} The return value of `fn`.
  */
 export function untrack(fn) {
-    context.push(null);
+    const prev = context;
+    context = null;
     try {
         return typeof fn === 'function' ? fn() : undefined;
     } finally {
-        context.pop();
+        context = prev;
     }
 }
 
 /**
- * Create a reactive side-effect that runs whenever its signal dependencies change.
- * @param {(() => any) | any[]} arg1 Either the callback function or an array of explicit dependencies.
- * @param {(() => any)} [arg2] The callback function if the first argument was explicit dependencies.
- * @param {object} [arg3] Optional configuration (e.g., { onLoad: false }).
- * @returns {() => void} A function to stop and cleanup the effect.
+ * Batches multiple signal updates into a single effect run.
+ */
+export function batch(fn) {
+    batchCount++;
+    try {
+        return fn();
+    } finally {
+        if (--batchCount === 0) {
+            const effects = pendingEffects;
+            pendingEffects = [];
+            for (let i = 0; i < effects.length; i++) {
+                effects[i].queued = false;
+                effects[i].run();
+            }
+        }
+    }
+}
+
+function subscribe(sub, dep) {
+    let link = sub.deps;
+    while (link) {
+        if (link.dep === dep) return;
+        link = link.nextDep;
+    }
+
+    link = {
+        sub,
+        dep,
+        nextSub: dep.subs,
+        prevSub: null,
+        nextDep: sub.deps,
+        prevDep: null
+    };
+
+    if (dep.subs) dep.subs.prevSub = link;
+    dep.subs = link;
+
+    if (sub.deps) sub.deps.prevDep = link;
+    sub.deps = link;
+}
+
+function cleanup(sub) {
+    let link = sub.deps;
+    while (link) {
+        const { dep, prevSub, nextSub } = link;
+        if (prevSub) prevSub.nextSub = nextSub;
+        else dep.subs = nextSub;
+        if (nextSub) nextSub.prevSub = prevSub;
+        link = link.nextDep;
+    }
+    sub.deps = null;
+}
+
+function notify(dep) {
+    let link = dep.subs;
+    while (link) {
+        const sub = link.sub;
+        if (sub.isComputed) {
+            sub.version = -1;
+            notify(sub);
+        } else {
+            if (batchCount > 0) {
+                if (!sub.queued) {
+                    sub.queued = true;
+                    pendingEffects.push(sub);
+                }
+            } else {
+                sub.run();
+            }
+        }
+        link = link.nextSub;
+    }
+}
+
+/**
+ * Create a reactive side-effect.
  */
 export function effect(arg1, arg2, arg3) {
-    let callback;
-    let explicitDeps = null;
-    let options = { onLoad: true };
-
+    let callback, explicitDeps = null, options = { onLoad: true };
     let owner = getCurrentComponent();
 
     if (typeof arg1 === 'function') {
         callback = arg1;
-        if (arg2 && typeof arg2 === 'object') {
-            options = { ...options, ...arg2 };
-        }
+        if (arg2 && typeof arg2 === 'object') options = { ...options, ...arg2 };
     } else {
-        explicitDeps = arg1;
-        callback = arg2;
-        if (arg3 && typeof arg3 === 'object') {
-            options = { ...options, ...arg3 };
-        }
+        explicitDeps = arg1; callback = arg2;
+        if (arg3 && typeof arg3 === 'object') options = { ...options, ...arg3 };
     }
 
-    const execute = () => {
-        if (typeof execute._cleanup === 'function') {
+    const sub = {
+        deps: null,
+        queued: false,
+        run() {
+            if (this._cleanup) {
+                try { this._cleanup(); } catch (e) {
+                    reportErrorSafe(e, { phase: 'effect.cleanup', component: owner?.name });
+                }
+                this._cleanup = null;
+            }
+            cleanup(this);
+            const prev = context;
+            context = this;
             try {
-                execute._cleanup();
-            } catch (e) {
-                const name = owner ? (owner.name ?? 'Anonymous') : null;
-                reportErrorSafe(e, { phase: 'effect.cleanup', component: name });
-            }
-            execute._cleanup = null;
-        }
-
-        cleanup(execute);
-        context.push(execute);
-        try {
-            if (explicitDeps) {
-                if (Array.isArray(explicitDeps)) {
-                    explicitDeps.forEach(dep => {
-                        if (typeof dep === 'function') dep();
-                    });
-                } else if (typeof explicitDeps === 'function') {
-                    explicitDeps();
+                if (explicitDeps) {
+                    if (Array.isArray(explicitDeps)) {
+                        for (let i = 0; i < explicitDeps.length; i++) {
+                            const d = explicitDeps[i];
+                            if (typeof d === 'function') d();
+                        }
+                    } else if (typeof explicitDeps === 'function') {
+                        explicitDeps();
+                    }
                 }
-            }
-            if (typeof callback === 'function') {
                 const res = callback();
-                if (typeof res === 'function') {
-                    execute._cleanup = res;
-                }
+                if (typeof res === 'function') this._cleanup = res;
+                if (owner?.isMounted) triggerUpdate(owner);
+            } catch (e) {
+                if (!isPromiseLike(e)) reportErrorSafe(e, { phase: 'effect', component: owner?.name });
+                else throw e;
+            } finally {
+                context = prev;
             }
-
-            if (owner && owner.isMounted) triggerUpdate(owner);
-
-        } catch (e) {
-            if (isPromiseLike(e)) throw e;
-            const name = owner ? (owner.name ?? 'Anonymous') : null;
-            reportErrorSafe(e, { phase: 'effect', component: name });
-        } finally {
-            context.pop();
-        }
+        },
+        _cleanup: null
     };
 
-    execute.dependencies = new Set();
-    execute._cleanup = null;
+    const dispose = () => {
+        if (sub._cleanup) {
+            try { sub._cleanup(); } catch (e) { }
+            sub._cleanup = null;
+        }
+        cleanup(sub);
+    };
 
     if (options.onLoad) {
-        onMount(execute);
+        onMount(() => sub.run());
     } else {
-        execute();
+        sub.run();
     }
 
-    return () => {
-        if (typeof execute._cleanup === 'function') {
-            try {
-                execute._cleanup();
-            } catch (e) {
-                const name = owner ? (owner.name ?? 'Anonymous') : null;
-                reportErrorSafe(e, { phase: 'effect.cleanup', component: name });
-            }
-        }
-        execute._cleanup = null;
-        cleanup(execute);
-    };
-}
-
-function cleanup(running) {
-    running.dependencies.forEach(dep => dep.delete(running));
-    running.dependencies.clear();
+    return dispose;
 }
 
 function defineBindMarkerIfNeeded(source, target) {
     if (source && source.bind === true) {
         try {
-            Object.defineProperty(target, 'bind', {
-                enumerable: true,
-                configurable: false,
-                writable: false,
-                value: true
-            });
+            Object.defineProperty(target, 'bind', { enumerable: true, value: true, configurable: true });
         } catch {
-            try { target.bind = true; } catch { }
+            target.bind = true;
         }
     }
 }
@@ -143,30 +185,23 @@ function attachHelpers(s) {
     if (!s || typeof s !== 'function') return s;
     if (typeof s.transform === 'function' && typeof s.validate === 'function' && typeof s.$pick === 'function') return s;
 
-    s.$pick = (p) => {
-        return pick(s, p);
-    };
+    s.$pick = (p) => pick(s, p);
 
     s.transform = (fromInput, toOutput) => {
         const fromFn = typeof fromInput === 'function' ? fromInput : (v) => v;
         const toFn = typeof toOutput === 'function' ? toOutput : (v) => v;
 
         const wrapped = function (...args) {
-            if (args.length > 0) {
-                return s(fromFn(args[0]));
-            }
+            if (args.length > 0) return s(fromFn(args[0]));
             return toFn(s());
         };
 
         wrapped.peek = () => toFn(s.peek());
         Object.defineProperty(wrapped, 'value', {
             enumerable: true,
-            get() {
-                return wrapped.peek();
-            },
-            set(v) {
-                wrapped(v);
-            }
+            configurable: true,
+            get() { return wrapped.peek(); },
+            set(v) { wrapped(v); }
         });
 
         defineBindMarkerIfNeeded(s, wrapped);
@@ -176,35 +211,23 @@ function attachHelpers(s) {
     s.validate = (validator, options = {}) => {
         const validateFn = typeof validator === 'function' ? validator : null;
         const error = signal(null);
-        const validateOn = (options && typeof options === 'object' && typeof options.validateOn === 'string')
-            ? options.validateOn
-            : 'input';
-        const validateInitial = Boolean(options && typeof options === 'object' && options.validateInitial);
+        const validateOn = options?.validateOn || 'input';
+        const validateInitial = !!options?.validateInitial;
 
         const wrapped = function (...args) {
             if (args.length > 0) {
                 const next = args[0];
                 if (validateFn) {
                     let res = true;
-                    try {
-                        res = validateFn(next, s.peek());
-                    } catch {
-                        res = 'Invalid value';
-                    }
+                    try { res = validateFn(next, s.peek()); } catch { res = 'Invalid value'; }
 
                     if (res === true || res === undefined || res === null) {
                         error(null);
                         return s(next);
                     }
-
-                    if (typeof res === 'string' && res.length) {
-                        error(res);
-                    } else {
-                        error('Invalid value');
-                    }
+                    error(typeof res === 'string' && res.length ? res : 'Invalid value');
                     return s.peek();
                 }
-
                 error(null);
                 return s(next);
             }
@@ -212,42 +235,28 @@ function attachHelpers(s) {
         };
 
         wrapped.check = () => {
-            if (!validateFn) {
-                error(null);
-                return true;
-            }
+            if (!validateFn) { error(null); return true; }
             const cur = s.peek();
             let res = true;
-            try {
-                res = validateFn(cur, cur);
-            } catch {
-                res = 'Invalid value';
-            }
+            try { res = validateFn(cur, cur); } catch { res = 'Invalid value'; }
             if (res === true || res === undefined || res === null) {
-                error(null);
-                return true;
+                error(null); return true;
             }
-            if (typeof res === 'string' && res.length) error(res);
-            else error('Invalid value');
+            error(typeof res === 'string' && res.length ? res : 'Invalid value');
             return false;
         };
 
         wrapped.peek = () => s.peek();
         Object.defineProperty(wrapped, 'value', {
             enumerable: true,
-            get() {
-                return wrapped.peek();
-            },
-            set(v) {
-                wrapped(v);
-            }
+            configurable: true,
+            get() { return wrapped.peek(); },
+            set(v) { wrapped(v); }
         });
 
         wrapped.error = error;
         wrapped.__round_validateOn = validateOn;
-        if (validateInitial) {
-            try { wrapped.check(); } catch { }
-        }
+        if (validateInitial) { try { wrapped.check(); } catch { } }
         defineBindMarkerIfNeeded(s, wrapped);
         return attachHelpers(wrapped);
     };
@@ -257,110 +266,76 @@ function attachHelpers(s) {
 
 /**
  * Create a reactive signal.
- * @template T
- * @param {T} [initialValue] The starting value.
- * @returns {RoundSignal<T>} A signal function that reads/writes the value.
  */
 export function signal(initialValue) {
-    let value = initialValue;
-    const subscriptions = new Set();
-
-    const read = () => {
-        const running = context[context.length - 1];
-        if (running) {
-            subscribe(running, subscriptions);
-        }
-        return value;
+    const dep = {
+        value: initialValue,
+        version: 0,
+        subs: null
     };
 
-    const peek = () => value;
-
-    const write = (newValue) => {
-        if (value !== newValue) {
-            value = newValue;
-            [...subscriptions].forEach(sub => sub());
+    const s = function (newValue) {
+        if (arguments.length > 0) {
+            if (dep.value !== newValue) {
+                dep.value = newValue;
+                dep.version = ++globalVersion;
+                notify(dep);
+            }
+            return dep.value;
         }
-        return value;
+        if (context) subscribe(context, dep);
+        return dep.value;
     };
 
-    const signal = function (...args) {
-        if (args.length > 0) {
-            return write(args[0]);
-        }
-        return read();
-    };
-
-    Object.defineProperty(signal, 'value', {
+    s.peek = () => dep.value;
+    Object.defineProperty(s, 'value', {
         enumerable: true,
-        get() {
-            return peek();
-        },
-        set(v) {
-            write(v);
-        }
+        configurable: true,
+        get() { return s(); },
+        set(v) { s(v); }
     });
 
-    signal.peek = peek;
-
-    return attachHelpers(signal);
+    return attachHelpers(s);
 }
 
 /**
- * Create a bindable signal intended for two-way DOM bindings.
- * @template T
- * @param {T} [initialValue] The starting value.
- * @returns {RoundSignal<T>} A signal function marked as bindable.
+ * Create a bindable signal.
  */
 export function bindable(initialValue) {
     const s = signal(initialValue);
     try {
-        Object.defineProperty(s, 'bind', {
-            enumerable: true,
-            configurable: false,
-            writable: false,
-            value: true
-        });
+        Object.defineProperty(s, 'bind', { enumerable: true, value: true, configurable: true });
     } catch {
-        // Fallback if defineProperty fails
-        try { s.bind = true; } catch { }
+        s.bind = true;
     }
     return attachHelpers(s);
 }
 
-function isSignalLike(v) {
-    return typeof v === 'function' && typeof v.peek === 'function' && ('value' in v);
-}
-
 function getIn(obj, path) {
     let cur = obj;
-    for (const key of path) {
+    for (let i = 0; i < path.length; i++) {
         if (cur == null) return undefined;
-        cur = cur[key];
+        cur = cur[path[i]];
     }
     return cur;
 }
 
 function setIn(obj, path, value) {
     if (!Array.isArray(path) || path.length === 0) return value;
-
     const root = (obj && typeof obj === 'object') ? obj : {};
     const out = Array.isArray(root) ? root.slice() : { ...root };
-
     let curOut = out;
     let curIn = root;
-
     for (let i = 0; i < path.length - 1; i++) {
         const key = path[i];
         const nextIn = (curIn && typeof curIn === 'object') ? curIn[key] : undefined;
         const nextOut = (nextIn && typeof nextIn === 'object')
             ? (Array.isArray(nextIn) ? nextIn.slice() : { ...nextIn })
             : {};
-
         curOut[key] = nextOut;
         curOut = nextOut;
         curIn = nextIn;
     }
-
     curOut[path[path.length - 1]] = value;
     return out;
 }
@@ -373,14 +348,9 @@ function parsePath(path) {
 
 /**
  * Create a read/write view of a specific path within a signal object.
- * @param {RoundSignal<any>} root The source signal.
- * @param {string | string[]} path The property path (e.g., 'user.profile.name' or ['user', 'profile', 'name']).
- * @returns {RoundSignal<any>} A signal-like view of the path.
  */
 export function pick(root, path) {
-    if (!isSignalLike(root)) {
-        throw new Error('[round] pick(root, path) expects root to be a signal (use bindable.object(...) or signal({...})).');
-    }
+    if (!isSignalLike(root)) throw new Error('[round] pick() expects a signal.');
     const pathArr = parsePath(path);
 
     const view = function (...args) {
@@ -395,25 +365,14 @@ export function pick(root, path) {
     view.peek = () => getIn(root.peek(), pathArr);
     Object.defineProperty(view, 'value', {
         enumerable: true,
-        get() {
-            return view.peek();
-        },
-        set(v) {
-            view(v);
-        }
+        configurable: true,
+        get() { return view.peek(); },
+        set(v) { view(v); }
     });
 
     if (root.bind === true) {
-        try {
-            Object.defineProperty(view, 'bind', {
-                enumerable: true,
-                configurable: false,
-                writable: false,
-                value: true
-            });
-        } catch {
-            try { view.bind = true; } catch { }
-        }
+        try { Object.defineProperty(view, 'bind', { enumerable: true, value: true, configurable: true }); }
+        catch { view.bind = true; }
     }
 
     return view;
@@ -421,43 +380,27 @@ export function pick(root, path) {
 
 function createBindableObjectProxy(root, basePath) {
     const cache = new Map();
-
     const handler = {
         get(_target, prop) {
             if (prop === Symbol.toStringTag) return 'BindableObject';
-            if (prop === Symbol.iterator) return undefined;
             if (prop === 'peek') return () => (basePath.length ? pick(root, basePath).peek() : root.peek());
             if (prop === 'value') return (basePath.length ? pick(root, basePath).peek() : root.peek());
             if (prop === 'bind') return true;
             if (prop === '$pick') {
-                return (p) => {
-                    const nextPath = basePath.concat(parsePath(p));
-                    return createBindableObjectProxy(root, nextPath);
-                };
+                return (p) => createBindableObjectProxy(root, basePath.concat(parsePath(p)));
             }
             if (prop === '_root') return root;
             if (prop === '_path') return basePath.slice();
-
-            // Allow calling the proxy (it's a function proxy below)
-            if (prop === 'call' || prop === 'apply') {
-                return Reflect.get(_target, prop);
-            }
 
             const key = String(prop);
             const nextPath = basePath.concat(key);
             const cacheKey = nextPath.join('.');
             if (cache.has(cacheKey)) return cache.get(cacheKey);
 
-            // If the stored value at this path is itself a signal/bindable, return it directly.
-            // This enables bindable.object({ email: bindable('').validate(...) }) patterns.
             try {
                 const stored = getIn(root.peek(), nextPath);
-                if (isSignalLike(stored)) {
-                    cache.set(cacheKey, stored);
-                    return stored;
-                }
-            } catch {
-            }
+                if (isSignalLike(stored)) { cache.set(cacheKey, stored); return stored; }
+            } catch { }
 
             const next = createBindableObjectProxy(root, nextPath);
             cache.set(cacheKey, next);
@@ -468,60 +411,27 @@ function createBindableObjectProxy(root, basePath) {
             const nextPath = basePath.concat(key);
             try {
                 const stored = getIn(root.peek(), nextPath);
-                if (isSignalLike(stored)) {
-                    stored(value);
-                    return true;
-                }
-            } catch {
-            }
+                if (isSignalLike(stored)) { stored(value); return true; }
+            } catch { }
             pick(root, nextPath)(value);
             return true;
         },
         has(_target, prop) {
-            // IMPORTANT: Proxy invariants require that if the target has a non-configurable
-            // property, the `has` trap must return true.
-            try {
-                if (Reflect.has(_target, prop)) return true;
-            } catch {
-            }
-
+            if (prop === 'peek' || prop === 'value' || prop === 'bind' || prop === '$pick') return true;
             const v = basePath.length ? pick(root, basePath).peek() : root.peek();
             return v != null && Object.prototype.hasOwnProperty.call(v, prop);
         }
     };
 
-    // Function proxy so you can do user() / user.name() etc.
     const fn = function (...args) {
-        if (args.length > 0) {
-            if (basePath.length) return pick(root, basePath)(args[0]);
-            return root(args[0]);
-        }
-        if (basePath.length) return pick(root, basePath)();
-        return root();
+        if (args.length > 0) return (basePath.length ? pick(root, basePath)(args[0]) : root(args[0]));
+        return (basePath.length ? pick(root, basePath)() : root());
     };
 
-    // Make it signal-like
     fn.peek = () => (basePath.length ? pick(root, basePath).peek() : root.peek());
-    Object.defineProperty(fn, 'value', {
-        enumerable: true,
-        get() {
-            return fn.peek();
-        },
-        set(v) {
-            fn(v);
-        }
-    });
-
-    try {
-        Object.defineProperty(fn, 'bind', {
-            enumerable: true,
-            configurable: false,
-            writable: false,
-            value: true
-        });
-    } catch {
-        try { fn.bind = true; } catch { }
-    }
+    Object.defineProperty(fn, 'value', { enumerable: true, configurable: true, get() { return fn.peek(); }, set(v) { fn(v); } });
+    try { Object.defineProperty(fn, 'bind', { enumerable: true, value: true, configurable: true }); }
+    catch { fn.bind = true; }
 
     return new Proxy(fn, handler);
 }
@@ -532,17 +442,43 @@ bindable.object = function (initialObject = {}) {
 };
 
 /**
- * Create a read-only computed signal derived from other signals.
- * @template T
- * @param {() => T} fn A function that computes the value.
- * @returns {(() => T)} A function that returns the derived value.
+ * Create a read-only computed signal.
  */
 export function derive(fn) {
-    const derived = signal();
+    const dep = {
+        fn,
+        value: undefined,
+        version: -1,
+        depsVersion: -1,
+        subs: null,
+        deps: null,
+        isComputed: true,
+        run() {
+            cleanup(this);
+            const prev = context;
+            context = this;
+            try {
+                this.value = this.fn();
+                this.depsVersion = globalVersion;
+                this.version = ++globalVersion;
+            } finally {
+                context = prev;
+            }
+        }
+    };
 
-    effect(() => {
-        derived(fn());
-    }, { onLoad: false });
+    const s = function () {
+        if (dep.version === -1 || dep.depsVersion < globalVersion) dep.run();
+        if (context) subscribe(context, dep);
+        return dep.value;
+    };
 
-    return () => derived();
+    s.peek = () => {
+        if (dep.version === -1 || dep.depsVersion < globalVersion) dep.run();
+        return dep.value;
+    };
+
+    Object.defineProperty(s, 'value', { enumerable: true, configurable: true, get() { return s(); } });
+
+    return attachHelpers(s);
 }

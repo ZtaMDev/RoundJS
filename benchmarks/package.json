@@ -9,9 +9,11 @@
         "bench": "npm run bench:build && npm run bench:runtime"
     },
     "dependencies": {
+        "@preact/signals-core": "^1.12.1",
+        "preact": "^10.28.0",
         "react": "^18.2.0",
         "react-dom": "^18.2.0",
-        "round-core": "^0.0.7"
+        "round-core": "^0.0.9"
     },
     "devDependencies": {
         "@vitejs/plugin-react": "^4.2.1",

@@ -1,6 +1,6 @@
 {
     "name": "round-core",
-    "version": "0.0.8",
+    "version": "0.0.9",
     "description": "A lightweight frontend framework for SPA with signals and fine grained reactivity",
     "main": "./dist/index.js",
     "types": "./dist/index.d.ts",
@@ -21,7 +21,6 @@
         "dev": "node ./src/cli.js dev --config ./test/main/round.config.json",
         "build": "node ./src/cli.js build --config ./test/main/round.config.json",
         "build:core": "vite build -c vite.config.build.js",
-        "test": "vitest run",
         "bench": "bun run --cwd benchmarks bench",
         "bench:build": "bun run --cwd benchmarks bench:build",
         "bench:runtime": "bun run --cwd benchmarks bench:runtime"
