@@ -443,6 +443,13 @@ export function Link(props = {}) {
         if (typeof props.onClick === 'function') props.onClick(e);
         if (e.defaultPrevented) return;
 
+        // Allow target="_blank" to work naturally
+        if (props.target === '_blank') return;
+
+        // Allow absolute/external URLs to work naturally
+        const strHref = String(href);
+        if (strHref.includes('://') || strHref.startsWith('mailto:') || strHref.startsWith('tel:')) return;
+
         // Classic navigation: allow the browser to reload.
         if (!spa || reload) return;
 

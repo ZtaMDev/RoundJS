@@ -1450,6 +1450,9 @@ function Link(props = {}) {
   const onClick = (e) => {
     if (typeof props.onClick === "function") props.onClick(e);
     if (e.defaultPrevented) return;
+    if (props.target === "_blank") return;
+    const strHref = String(href);
+    if (strHref.includes("://") || strHref.startsWith("mailto:") || strHref.startsWith("tel:")) return;
     if (!spa || reload) return;
     if (e.button !== 0) return;
     if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;

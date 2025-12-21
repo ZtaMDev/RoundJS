@@ -5,8 +5,6 @@ import { captureContext, runInContext, readContext } from './context.js';
 import { SuspenseContext } from './suspense.js';
 
 
-let isObserverInitialized = false;
-
 const warnedSignals = new Set();
 
 function isPromiseLike(v) {
