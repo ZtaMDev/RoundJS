@@ -20,7 +20,7 @@ Extension for [VSCode](https://marketplace.visualstudio.com/items?itemName=ZtaMD
 
 --- 
 
-Instead of a Virtual DOM diff, Round updates the UI by subscribing DOM updates directly to reactive primitives (**signals**) and **bindables**. This keeps rendering predictable, small, and fast for interactive apps.
+Instead of a Virtual DOM diff, Round updates the UI by subscribing DOM updates directly to reactive primitives **signals** and **bindables**. This keeps rendering predictable, small, and fast for interactive apps.
 
 The `round-core` package is the **foundation of RoundJS**.
 
