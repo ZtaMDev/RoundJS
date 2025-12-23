@@ -163,6 +163,23 @@ effect(() => {
 name('Grace');
 ```
 
+### `untrack(fn)`
+
+Run a function without tracking any signals it reads.
+
+```javascript
+import { signal, untrack, effect } from 'round-core';
+
+const count = signal(0);
+effect(() => {
+    console.log('Count is:', count());
+    untrack(() => {
+        // This read won't trigger the effect if it changes elsewhere
+        console.log('Static value:', count());
+    });
+});
+```
+
 ### `bindable(initialValue)`
 
 `bindable()` creates a signal intended for **two-way DOM bindings**.
@@ -206,14 +223,24 @@ export function TodoList() {
     
     return (
         <div>
-            {todos().map(todo => <div>{todo.text}</div>)}
+            {for(todo in todos()){
+                <div>{todo.text}</div>
+            }}
             <button onClick={() => store.addTodo('Buy Milk')}>Add</button>
         </div>
     );
 }
 
 // 3. Persistence (Optional)
-store.persist('my-app-store'); 
+store.persist('my-app-store', { 
+    debounce: 100, // ms
+    exclude: ['someSecretKey'] 
+}); 
+
+// 4. Advanced Methods
+store.patch({ filter: 'completed' }); // Update multiple keys at once
+const data = store.snapshot({ reactive: false }); // Get static JSON of state
+store.set('todos', []); // Direct set
 ```
 
 ### `bindable.object(initialObject)` and deep binding
@@ -238,6 +265,38 @@ export function Profile() {
             </label>
         </div>
     );
+}
+```
+
+## Lifecycle Hooks
+
+Round provides hooks to tap into the lifecycle of components. These must be called during the synchronous execution of your component function.
+
+### `onMount(fn)`
+Runs after the component is first created and its elements are added to the DOM. If `fn` returns a function, it's used as a cleanup (equivalent to `onUnmount`).
+
+### `onUnmount(fn)`
+Runs when the component's elements are removed from the DOM.
+
+### `onUpdate(fn)`
+Runs whenever any signal read during the component's *initial* render is updated.
+
+### `onCleanup(fn)`
+Alias for `onUnmount`.
+
+```jsx
+import { onMount, onUnmount } from 'round-core';
+
+export function MyComponent() {
+    onMount(() => {
+        console.log('Mounted!');
+        const timer = setInterval(() => {}, 1000);
+        return () => clearInterval(timer); // Cleanup
+    });
+
+    onUnmount(() => console.log('Goodbye!'));
+
+    return <div>Hello</div>;
 }
 ```
 
@@ -397,6 +456,22 @@ Round aims to provide strong developer feedback:
 
 - Runtime error reporting with safe boundaries.
 - `ErrorBoundary` to catch render-time errors and show a fallback.
+
+### `ErrorBoundary`
+
+Wrap components to prevent the whole app from crashing if a child fails to render.
+
+```jsx
+import { ErrorBoundary } from 'round-core';
+
+function DangerousComponent() {
+    throw new Error('Boom!');
+}
+
+<ErrorBoundary fallback={(err) => <div className="error">Something went wrong: {err.message}</div>}>
+    <DangerousComponent />
+</ErrorBoundary>
+```
 
 ## CLI
 

@@ -1,8 +1,10 @@
-import { marked } from "marked";
+var __defProp = Object.defineProperty;
+var __name = (target, value) => __defProp(target, "name", { value, configurable: true });
 let reporter = null;
 function setErrorReporter(fn) {
   reporter = typeof fn === "function" ? fn : null;
 }
+__name(setErrorReporter, "setErrorReporter");
 function reportErrorSafe(error, info) {
   if (!reporter) return;
   try {
@@ -10,10 +12,12 @@ function reportErrorSafe(error, info) {
   } catch {
   }
 }
+__name(reportErrorSafe, "reportErrorSafe");
 const componentStack = [];
 function getCurrentComponent() {
   return componentStack[componentStack.length - 1];
 }
+__name(getCurrentComponent, "getCurrentComponent");
 function runInLifecycle(componentInstance, fn) {
   componentStack.push(componentInstance);
   try {
@@ -22,6 +26,7 @@ function runInLifecycle(componentInstance, fn) {
     componentStack.pop();
   }
 }
+__name(runInLifecycle, "runInLifecycle");
 function createComponentInstance() {
   return {
     mountHooks: [],
@@ -32,6 +37,7 @@ function createComponentInstance() {
     mountTimerId: null
   };
 }
+__name(createComponentInstance, "createComponentInstance");
 function onMount(fn) {
   const component = getCurrentComponent();
   if (component) {
@@ -44,12 +50,14 @@ function onMount(fn) {
     }
   }
 }
+__name(onMount, "onMount");
 function onUnmount(fn) {
   const component = getCurrentComponent();
   if (component) {
     component.unmountHooks.push(fn);
   }
 }
+__name(onUnmount, "onUnmount");
 const onCleanup = onUnmount;
 function onUpdate(fn) {
   const component = getCurrentComponent();
@@ -57,6 +65,7 @@ function onUpdate(fn) {
     component.updateHooks.push(fn);
   }
 }
+__name(onUpdate, "onUpdate");
 function mountComponent(component) {
   if (component.isMounted) return;
   try {
@@ -78,6 +87,7 @@ function mountComponent(component) {
     }
   });
 }
+__name(mountComponent, "mountComponent");
 function unmountComponent(component) {
   if (!component.isMounted) return;
   if (component.mountTimerId != null) {
@@ -96,6 +106,7 @@ function unmountComponent(component) {
     }
   });
 }
+__name(unmountComponent, "unmountComponent");
 function triggerUpdate(component) {
   if (!component.isMounted) return;
   component.updateHooks.forEach((hook) => {
@@ -106,6 +117,7 @@ function triggerUpdate(component) {
     }
   });
 }
+__name(triggerUpdate, "triggerUpdate");
 const observer = typeof MutationObserver !== "undefined" ? new MutationObserver((mutations) => {
   mutations.forEach((mutation) => {
     if (mutation.removedNodes.length > 0) {
@@ -124,11 +136,13 @@ function cleanupNodeRecursively(node) {
   }
   node.childNodes.forEach(cleanupNodeRecursively);
 }
+__name(cleanupNodeRecursively, "cleanupNodeRecursively");
 function initLifecycleRoot(rootNode) {
   if (!rootNode) return;
   if (!observer) return;
   observer.observe(rootNode, { childList: true, subtree: true });
 }
+__name(initLifecycleRoot, "initLifecycleRoot");
 const Lifecycle = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.defineProperty({
   __proto__: null,
   createComponentInstance,
@@ -150,9 +164,11 @@ let globalVersion = 0;
 function isPromiseLike$2(v) {
   return v && (typeof v === "object" || typeof v === "function") && typeof v.then === "function";
 }
+__name(isPromiseLike$2, "isPromiseLike$2");
 function isSignalLike(v) {
   return typeof v === "function" && typeof v.peek === "function" && "value" in v;
 }
+__name(isSignalLike, "isSignalLike");
 function untrack(fn) {
   const prev = context;
   context = null;
@@ -162,6 +178,7 @@ function untrack(fn) {
     context = prev;
   }
 }
+__name(untrack, "untrack");
 function batch(fn) {
   batchCount++;
   try {
@@ -177,6 +194,7 @@ function batch(fn) {
     }
   }
 }
+__name(batch, "batch");
 function subscribe(sub, dep) {
   let link = sub.deps;
   while (link) {
@@ -196,6 +214,7 @@ function subscribe(sub, dep) {
   if (sub.deps) sub.deps.prevDep = link;
   sub.deps = link;
 }
+__name(subscribe, "subscribe");
 function cleanup(sub) {
   let link = sub.deps;
   while (link) {
@@ -207,6 +226,7 @@ function cleanup(sub) {
   }
   sub.deps = null;
 }
+__name(cleanup, "cleanup");
 function notify(dep) {
   let link = dep.subs;
   while (link) {
@@ -227,6 +247,7 @@ function notify(dep) {
     link = link.nextSub;
   }
 }
+__name(notify, "notify");
 function effect(arg1, arg2, arg3) {
   let callback, explicitDeps = null, options = { onLoad: true };
   let owner = getCurrentComponent();
@@ -276,7 +297,7 @@ function effect(arg1, arg2, arg3) {
     },
     _cleanup: null
   };
-  const dispose = () => {
+  const dispose = /* @__PURE__ */ __name(() => {
     if (sub._cleanup) {
       try {
         sub._cleanup();
@@ -285,7 +306,7 @@ function effect(arg1, arg2, arg3) {
       sub._cleanup = null;
     }
     cleanup(sub);
-  };
+  }, "dispose");
   if (options.onLoad) {
     onMount(() => sub.run());
   } else {
@@ -293,6 +314,7 @@ function effect(arg1, arg2, arg3) {
   }
   return dispose;
 }
+__name(effect, "effect");
 function defineBindMarkerIfNeeded(source, target) {
   if (source && source.bind === true) {
     try {
@@ -302,6 +324,7 @@ function defineBindMarkerIfNeeded(source, target) {
     }
   }
 }
+__name(defineBindMarkerIfNeeded, "defineBindMarkerIfNeeded");
 function attachHelpers(s) {
   if (!s || typeof s !== "function") return s;
   if (typeof s.transform === "function" && typeof s.validate === "function" && typeof s.$pick === "function") return s;
@@ -309,10 +332,10 @@ function attachHelpers(s) {
   s.transform = (fromInput, toOutput) => {
     const fromFn = typeof fromInput === "function" ? fromInput : (v) => v;
     const toFn = typeof toOutput === "function" ? toOutput : (v) => v;
-    const wrapped = function(...args) {
+    const wrapped = /* @__PURE__ */ __name(function(...args) {
       if (args.length > 0) return s(fromFn(args[0]));
       return toFn(s());
-    };
+    }, "wrapped");
     wrapped.peek = () => toFn(s.peek());
     Object.defineProperty(wrapped, "value", {
       enumerable: true,
@@ -332,7 +355,7 @@ function attachHelpers(s) {
     const error = signal(null);
     const validateOn = options?.validateOn || "input";
     const validateInitial = !!options?.validateInitial;
-    const wrapped = function(...args) {
+    const wrapped = /* @__PURE__ */ __name(function(...args) {
       if (args.length > 0) {
         const next = args[0];
         if (validateFn) {
@@ -353,7 +376,7 @@ function attachHelpers(s) {
         return s(next);
       }
       return s();
-    };
+    }, "wrapped");
     wrapped.check = () => {
       if (!validateFn) {
         error(null);
@@ -397,13 +420,14 @@ function attachHelpers(s) {
   };
   return s;
 }
+__name(attachHelpers, "attachHelpers");
 function signal(initialValue) {
   const dep = {
     value: initialValue,
     version: 0,
     subs: null
   };
-  const s = function(newValue) {
+  const s = /* @__PURE__ */ __name(function(newValue) {
     if (arguments.length > 0) {
       if (dep.value !== newValue) {
         dep.value = newValue;
@@ -414,7 +438,7 @@ function signal(initialValue) {
     }
     if (context) subscribe(context, dep);
     return dep.value;
-  };
+  }, "s");
   s.peek = () => dep.value;
   Object.defineProperty(s, "value", {
     enumerable: true,
@@ -428,6 +452,7 @@ function signal(initialValue) {
   });
   return attachHelpers(s);
 }
+__name(signal, "signal");
 function bindable(initialValue) {
   const s = signal(initialValue);
   try {
@@ -437,6 +462,7 @@ function bindable(initialValue) {
   }
   return attachHelpers(s);
 }
+__name(bindable, "bindable");
 function getIn(obj, path) {
   let cur = obj;
   for (let i = 0; i < path.length; i++) {
@@ -445,6 +471,7 @@ function getIn(obj, path) {
   }
   return cur;
 }
+__name(getIn, "getIn");
 function setIn(obj, path, value) {
   if (!Array.isArray(path) || path.length === 0) return value;
   const root = obj && typeof obj === "object" ? obj : {};
@@ -462,22 +489,24 @@ function setIn(obj, path, value) {
   curOut[path[path.length - 1]] = value;
   return out;
 }
+__name(setIn, "setIn");
 function parsePath(path) {
   if (Array.isArray(path)) return path.map((p) => String(p));
   if (typeof path === "string") return path.split(".").filter(Boolean);
   return [String(path)];
 }
+__name(parsePath, "parsePath");
 function pick(root, path) {
   if (!isSignalLike(root)) throw new Error("[round] pick() expects a signal.");
   const pathArr = parsePath(path);
-  const view = function(...args) {
+  const view = /* @__PURE__ */ __name(function(...args) {
     if (args.length > 0) {
       const nextRoot = setIn(root.peek(), pathArr, args[0]);
       return root(nextRoot);
     }
     const v = root();
     return getIn(v, pathArr);
-  };
+  }, "view");
   view.peek = () => getIn(root.peek(), pathArr);
   Object.defineProperty(view, "value", {
     enumerable: true,
@@ -498,6 +527,7 @@ function pick(root, path) {
   }
   return view;
 }
+__name(pick, "pick");
 function createBindableObjectProxy(root, basePath) {
   const cache = /* @__PURE__ */ new Map();
   const handler = {
@@ -547,10 +577,10 @@ function createBindableObjectProxy(root, basePath) {
       return v != null && Object.prototype.hasOwnProperty.call(v, prop);
     }
   };
-  const fn = function(...args) {
+  const fn = /* @__PURE__ */ __name(function(...args) {
     if (args.length > 0) return basePath.length ? pick(root, basePath)(args[0]) : root(args[0]);
     return basePath.length ? pick(root, basePath)() : root();
-  };
+  }, "fn");
   fn.peek = () => basePath.length ? pick(root, basePath).peek() : root.peek();
   Object.defineProperty(fn, "value", { enumerable: true, configurable: true, get() {
     return fn.peek();
@@ -564,6 +594,7 @@ function createBindableObjectProxy(root, basePath) {
   }
   return new Proxy(fn, handler);
 }
+__name(createBindableObjectProxy, "createBindableObjectProxy");
 bindable.object = function(initialObject = {}) {
   const root = bindable(initialObject && typeof initialObject === "object" ? initialObject : {});
   return createBindableObjectProxy(root, []);
@@ -590,11 +621,11 @@ function derive(fn) {
       }
     }
   };
-  const s = function() {
+  const s = /* @__PURE__ */ __name(function() {
     if (dep.version === -1 || dep.depsVersion < globalVersion) dep.run();
     if (context) subscribe(context, dep);
     return dep.value;
-  };
+  }, "s");
   s.peek = () => {
     if (dep.version === -1 || dep.depsVersion < globalVersion) dep.run();
     return dep.value;
@@ -604,6 +635,7 @@ function derive(fn) {
   } });
   return attachHelpers(s);
 }
+__name(derive, "derive");
 const Signals = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.defineProperty({
   __proto__: null,
   batch,
@@ -619,9 +651,11 @@ const contextStack = [];
 function pushContext(values) {
   contextStack.push(values);
 }
+__name(pushContext, "pushContext");
 function popContext() {
   contextStack.pop();
 }
+__name(popContext, "popContext");
 function readContext(ctx) {
   for (let i = contextStack.length - 1; i >= 0; i--) {
     const layer = contextStack[i];
@@ -631,6 +665,7 @@ function readContext(ctx) {
   }
   return ctx.defaultValue;
 }
+__name(readContext, "readContext");
 function createContext(defaultValue) {
   const ctx = {
     id: nextContextId++,
@@ -654,9 +689,11 @@ function createContext(defaultValue) {
       popContext();
     }
   }
+  __name(Provider, "Provider");
   ctx.Provider = Provider;
   return ctx;
 }
+__name(createContext, "createContext");
 function bindContext(ctx) {
   return () => {
     const provided = readContext(ctx);
@@ -670,9 +707,11 @@ function bindContext(ctx) {
     return provided;
   };
 }
+__name(bindContext, "bindContext");
 function captureContext() {
   return contextStack.slice();
 }
+__name(captureContext, "captureContext");
 function runInContext(snapshot, fn) {
   const prev = contextStack.slice();
   contextStack.length = 0;
@@ -684,6 +723,7 @@ function runInContext(snapshot, fn) {
     contextStack.push(...prev);
   }
 }
+__name(runInContext, "runInContext");
 const Context = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.defineProperty({
   __proto__: null,
   bindContext,
@@ -695,6 +735,7 @@ const Context = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.definePrope
 function isPromiseLike$1(v) {
   return v && (typeof v === "object" || typeof v === "function") && typeof v.then === "function";
 }
+__name(isPromiseLike$1, "isPromiseLike$1");
 const SuspenseContext = createContext(null);
 function lazy(loader) {
   if (typeof loader !== "function") {
@@ -716,7 +757,8 @@ function lazy(loader) {
     if (fns.length === 1) return fns[0];
     return null;
   }
-  return function LazyComponent(props = {}) {
+  __name(pickComponent, "pickComponent");
+  return /* @__PURE__ */ __name(function LazyComponent(props = {}) {
     if (status === "resolved") {
       return createElement(component, props);
     }
@@ -744,15 +786,16 @@ function lazy(loader) {
       }
     }
     throw promise;
-  };
+  }, "LazyComponent");
 }
+__name(lazy, "lazy");
 function Suspense(props = {}) {
   const tick = signal(0);
   const pending = /* @__PURE__ */ new Set();
   const waiting = /* @__PURE__ */ new Set();
   const child = Array.isArray(props.children) ? props.children[0] : props.children;
   const childFn = typeof child === "function" ? child : () => child;
-  const register = (promise) => {
+  const register = /* @__PURE__ */ __name((promise) => {
     if (!waiting.has(promise)) {
       waiting.add(promise);
       pending.add(promise);
@@ -769,7 +812,7 @@ function Suspense(props = {}) {
         }
       );
     }
-  };
+  }, "register");
   return createElement(SuspenseContext.Provider, {
     value: { register }
   }, () => {
@@ -793,6 +836,7 @@ function Suspense(props = {}) {
     }
   });
 }
+__name(Suspense, "Suspense");
 const Suspense$1 = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.defineProperty({
   __proto__: null,
   Suspense,
@@ -803,6 +847,7 @@ const warnedSignals = /* @__PURE__ */ new Set();
 function isPromiseLike(v) {
   return v && (typeof v === "object" || typeof v === "function") && typeof v.then === "function";
 }
+__name(isPromiseLike, "isPromiseLike");
 function warnSignalDirectUsage(fn, kind) {
   try {
     if (typeof fn !== "function") return;
@@ -817,6 +862,7 @@ function warnSignalDirectUsage(fn, kind) {
   } catch {
   }
 }
+__name(warnSignalDirectUsage, "warnSignalDirectUsage");
 function createElement(tag, props = {}, ...children) {
   if (typeof tag === "function") {
     const componentInstance = createComponentInstance();
@@ -905,7 +951,7 @@ function createElement(tag, props = {}, ...children) {
           }
           return;
         }
-        const coerceFromDom = () => {
+        const coerceFromDom = /* @__PURE__ */ __name(() => {
           if (isCheckedBinding) {
             if (type === "radio") {
               return Boolean(el.checked);
@@ -926,8 +972,8 @@ function createElement(tag, props = {}, ...children) {
             }
           }
           return el.value;
-        };
-        const writeToDom = (v) => {
+        }, "coerceFromDom");
+        const writeToDom = /* @__PURE__ */ __name((v) => {
           if (isCheckedBinding) {
             const b = Boolean(v);
             if (type === "radio") {
@@ -948,8 +994,8 @@ function createElement(tag, props = {}, ...children) {
             return;
           }
           el.value = v ?? "";
-        };
-        const warnTypeMismatch = (next) => {
+        }, "writeToDom");
+        const warnTypeMismatch = /* @__PURE__ */ __name((next) => {
           try {
             if (isCheckedBinding && typeof next !== "boolean") {
               console.warn("[round] bind:checked expects a boolean signal value.");
@@ -962,7 +1008,7 @@ function createElement(tag, props = {}, ...children) {
             }
           } catch {
           }
-        };
+        }, "warnTypeMismatch");
         effect(() => {
           const v = value();
           warnTypeMismatch(v);
@@ -1048,6 +1094,7 @@ function createElement(tag, props = {}, ...children) {
   children.forEach((child) => appendChild(element, child));
   return element;
 }
+__name(createElement, "createElement");
 function appendChild(parent, child) {
   if (child === null || child === void 0) return;
   if (Array.isArray(child)) {
@@ -1124,9 +1171,11 @@ function appendChild(parent, child) {
     return;
   }
 }
+__name(appendChild, "appendChild");
 function Fragment(props) {
   return props.children;
 }
+__name(Fragment, "Fragment");
 const DOM = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.defineProperty({
   __proto__: null,
   Fragment,
@@ -1151,12 +1200,15 @@ function ensureListener() {
     currentPath(window.location.pathname);
   });
 }
+__name(ensureListener, "ensureListener");
 function getPathname() {
   return normalizePathname(currentPath());
 }
+__name(getPathname, "getPathname");
 function usePathname() {
   return () => normalizePathname(currentPath());
 }
+__name(usePathname, "usePathname");
 function getLocation() {
   if (!hasWindow$1) {
     return { pathname: normalizePathname("/"), search: "", hash: "" };
@@ -1167,6 +1219,7 @@ function getLocation() {
     hash: window.location.hash ?? ""
   };
 }
+__name(getLocation, "getLocation");
 function useLocation() {
   return () => {
     const pathname = normalizePathname(currentPath());
@@ -1174,22 +1227,26 @@ function useLocation() {
     return { pathname, search: window.location.search ?? "", hash: window.location.hash ?? "" };
   };
 }
+__name(useLocation, "useLocation");
 function getRouteReady() {
   const pathname = normalizePathname(currentPath());
   return Boolean(pathEvalReady()) && lastPathEvaluated === pathname;
 }
+__name(getRouteReady, "getRouteReady");
 function useRouteReady() {
   return () => {
     const pathname = normalizePathname(currentPath());
     return Boolean(pathEvalReady()) && lastPathEvaluated === pathname;
   };
 }
+__name(useRouteReady, "useRouteReady");
 function getIsNotFound() {
   const pathname = normalizePathname(currentPath());
   if (pathname === "/") return false;
   if (!(Boolean(pathEvalReady()) && lastPathEvaluated === pathname)) return false;
   return !Boolean(pathHasMatch());
 }
+__name(getIsNotFound, "getIsNotFound");
 function useIsNotFound() {
   return () => {
     const pathname = normalizePathname(currentPath());
@@ -1198,6 +1255,7 @@ function useIsNotFound() {
     return !Boolean(pathHasMatch());
   };
 }
+__name(useIsNotFound, "useIsNotFound");
 function mountAutoNotFound() {
   if (!hasWindow$1 || autoNotFoundMounted) return;
   autoNotFoundMounted = true;
@@ -1227,6 +1285,7 @@ function mountAutoNotFound() {
   });
   root.appendChild(view);
 }
+__name(mountAutoNotFound, "mountAutoNotFound");
 function navigate(to, options = {}) {
   if (!hasWindow$1) return;
   ensureListener();
@@ -1236,6 +1295,7 @@ function navigate(to, options = {}) {
   else window.history.pushState({}, "", normalizedTo);
   currentPath(window.location.pathname);
 }
+__name(navigate, "navigate");
 function applyHead({ title, meta, links, icon, favicon }) {
   if (!hasWindow$1) return;
   if (typeof title === "string") {
@@ -1292,9 +1352,11 @@ function applyHead({ title, meta, links, icon, favicon }) {
     });
   }
 }
+__name(applyHead, "applyHead");
 function startHead(_head) {
   return _head;
 }
+__name(startHead, "startHead");
 function splitUrl(url) {
   const str = String(url ?? "");
   const hashIdx = str.indexOf("#");
@@ -1303,6 +1365,7 @@ function splitUrl(url) {
   if (cutIdx === -1) return { path: str, suffix: "" };
   return { path: str.slice(0, cutIdx), suffix: str.slice(cutIdx) };
 }
+__name(splitUrl, "splitUrl");
 function normalizePathname(p) {
   let pathname = String(p ?? "/");
   if (!pathname.startsWith("/")) pathname = "/" + pathname;
@@ -1315,17 +1378,20 @@ function normalizePathname(p) {
   }
   return pathname;
 }
+__name(normalizePathname, "normalizePathname");
 function normalizeTo(to) {
   const { path, suffix } = splitUrl(to);
   if (!path.startsWith("/")) return String(to ?? "");
   return normalizePathname(path) + suffix;
 }
+__name(normalizeTo, "normalizeTo");
 function matchRoute(route, pathname, exact = true) {
   const r = normalizePathname(route);
   const p = normalizePathname(pathname);
   if (exact) return r === p;
   return p === r || p.startsWith(r.endsWith("/") ? r : r + "/");
 }
+__name(matchRoute, "matchRoute");
 function beginPathEvaluation(pathname) {
   if (pathname !== lastPathEvaluated) {
     lastPathEvaluated = pathname;
@@ -1337,9 +1403,11 @@ function beginPathEvaluation(pathname) {
     }, 0);
   }
 }
+__name(beginPathEvaluation, "beginPathEvaluation");
 function setNotFound(Component) {
   defaultNotFoundComponent = Component;
 }
+__name(setNotFound, "setNotFound");
 function Route(props = {}) {
   ensureListener();
   return createElement("span", { style: { display: "contents" } }, () => {
@@ -1378,6 +1446,7 @@ function Route(props = {}) {
     return createElement(RoutingContext.Provider, { value: fullRoute }, props.children);
   });
 }
+__name(Route, "Route");
 function Page(props = {}) {
   ensureListener();
   return createElement("span", { style: { display: "contents" } }, () => {
@@ -1416,6 +1485,7 @@ function Page(props = {}) {
     return createElement(RoutingContext.Provider, { value: fullRoute }, props.children);
   });
 }
+__name(Page, "Page");
 function NotFound(props = {}) {
   ensureListener();
   userProvidedNotFound = true;
@@ -1441,13 +1511,14 @@ function NotFound(props = {}) {
     );
   });
 }
+__name(NotFound, "NotFound");
 function Link(props = {}) {
   ensureListener();
   const rawHref = props.href ?? props.to ?? "#";
   const href = spaNormalizeHref(rawHref);
   const spa = props.spa !== void 0 ? Boolean(props.spa) : true;
   const reload = Boolean(props.reload);
-  const onClick = (e) => {
+  const onClick = /* @__PURE__ */ __name((e) => {
     if (typeof props.onClick === "function") props.onClick(e);
     if (e.defaultPrevented) return;
     if (props.target === "_blank") return;
@@ -1458,16 +1529,18 @@ function Link(props = {}) {
     if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
     e.preventDefault();
     navigate(href);
-  };
+  }, "onClick");
   const { children, to, ...rest } = props;
   const normalizedChildren = Array.isArray(children) ? children : children === void 0 || children === null ? [] : [children];
   return createElement("a", { ...rest, href, onClick }, ...normalizedChildren);
 }
+__name(Link, "Link");
 function spaNormalizeHref(href) {
   const str = String(href ?? "#");
   if (!str.startsWith("/")) return str;
   return normalizeTo(str);
 }
+__name(spaNormalizeHref, "spaNormalizeHref");
 const Router = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.defineProperty({
   __proto__: null,
   Link,
@@ -1485,65 +1558,6 @@ const Router = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.defineProper
   useLocation,
   usePathname,
   useRouteReady
-}, Symbol.toStringTag, { value: "Module" }));
-const mdLoaders = typeof import.meta !== "undefined" && typeof import.meta.glob === "function" ? /* @__PURE__ */ Object.assign({}) : {};
-function Markdown(props = {}) {
-  const html = signal("");
-  const parse = (md) => {
-    try {
-      return marked.parse(md ?? "");
-    } catch {
-      return "";
-    }
-  };
-  if (typeof props.content === "string") {
-    html(parse(props.content));
-  }
-  onMount(async () => {
-    if (typeof props.src !== "string") return;
-    const base = typeof props.base === "string" ? props.base : "/src";
-    const resolved = props.src.startsWith("./") ? base + props.src.slice(1) : props.src;
-    const loader = mdLoaders[resolved];
-    if (typeof loader === "function") {
-      try {
-        const text = await loader();
-        html(parse(text ?? ""));
-        return;
-      } catch (e) {
-        reportErrorSafe(e instanceof Error ? e : new Error(`Failed to load markdown: ${resolved}`), { phase: "markdown.load", component: "Markdown" });
-        html("");
-        return;
-      }
-    }
-    try {
-      const r = await fetch(resolved);
-      if (!r.ok) {
-        reportErrorSafe(new Error(`Markdown not found: ${resolved} (HTTP ${r.status})`), { phase: "markdown.fetch", component: "Markdown" });
-        html("");
-        return;
-      }
-      const text = await r.text();
-      const looksLikeHtml = /^\s*<!doctype\s+html\b|^\s*<html\b/i.test(text);
-      if (looksLikeHtml) {
-        reportErrorSafe(new Error(`Markdown not found (served HTML fallback): ${resolved}`), { phase: "markdown.fetch", component: "Markdown" });
-        html("");
-        return;
-      }
-      html(parse(text));
-    } catch (e) {
-      reportErrorSafe(e instanceof Error ? e : new Error(`Failed to fetch markdown: ${resolved}`), { phase: "markdown.fetch", component: "Markdown" });
-      html("");
-    }
-  });
-  const className = props.className ?? props.theme ?? "";
-  return createElement("div", {
-    className,
-    dangerouslySetInnerHTML: () => ({ __html: html() })
-  });
-}
-const Markdown$1 = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.defineProperty({
-  __proto__: null,
-  Markdown
 }, Symbol.toStringTag, { value: "Module" }));
 const errors = signal([]);
 let lastSentKey = null;
@@ -1596,12 +1610,15 @@ function reportError(error, info = {}) {
   } catch {
   }
 }
+__name(reportError, "reportError");
 function clearErrors() {
   errors([]);
 }
+__name(clearErrors, "clearErrors");
 function useErrors() {
   return errors;
 }
+__name(useErrors, "useErrors");
 setErrorReporter(reportError);
 function ErrorProvider(props = {}) {
   return createElement("span", { style: { display: "contents" } }, () => {
@@ -1670,19 +1687,19 @@ function ErrorProvider(props = {}) {
               borderRadius: "10px",
               cursor: "pointer"
             },
-            onMouseOver: (e) => {
+            onMouseOver: /* @__PURE__ */ __name((e) => {
               try {
                 e.currentTarget.style.background = "rgba(255,255,255,0.12)";
               } catch {
               }
-            },
-            onMouseOut: (e) => {
+            }, "onMouseOver"),
+            onMouseOut: /* @__PURE__ */ __name((e) => {
               try {
                 e.currentTarget.style.background = "rgba(255,255,255,0.08)";
               } catch {
               }
-            },
-            onClick: () => clearErrors()
+            }, "onMouseOut"),
+            onClick: /* @__PURE__ */ __name(() => clearErrors(), "onClick")
           }, "Dismiss")
         ),
         createElement(
@@ -1719,6 +1736,7 @@ function ErrorProvider(props = {}) {
     );
   });
 }
+__name(ErrorProvider, "ErrorProvider");
 function initErrorHandling(container) {
   if (typeof document === "undefined") return;
   if (!container || !(container instanceof Element)) return;
@@ -1750,6 +1768,7 @@ function initErrorHandling(container) {
     });
   }
 }
+__name(initErrorHandling, "initErrorHandling");
 const Errors = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.defineProperty({
   __proto__: null,
   ErrorProvider,
@@ -1791,9 +1810,11 @@ function ErrorBoundary(props = {}) {
     }
   });
 }
+__name(ErrorBoundary, "ErrorBoundary");
 function hasWindow() {
   return typeof window !== "undefined" && typeof document !== "undefined";
 }
+__name(hasWindow, "hasWindow");
 function createStore(initialState = {}, actions = null) {
   const state = initialState && typeof initialState === "object" ? initialState : {};
   const signals = /* @__PURE__ */ Object.create(null);
@@ -1820,12 +1841,14 @@ function createStore(initialState = {}, actions = null) {
     }
     return v;
   }
+  __name(setKey, "setKey");
   function patch(obj) {
     if (!obj || typeof obj !== "object") return;
     for (const [k, v] of Object.entries(obj)) {
       setKey(k, v);
     }
   }
+  __name(patch, "patch");
   function getSnapshot(reactive = false) {
     const out = {};
     for (const k of Object.keys(signals)) {
@@ -1833,6 +1856,7 @@ function createStore(initialState = {}, actions = null) {
     }
     return out;
   }
+  __name(getSnapshot, "getSnapshot");
   const store = {
     use(key) {
       const k = String(key);
@@ -1871,7 +1895,7 @@ function createStore(initialState = {}, actions = null) {
   if (actions && typeof actions === "object") {
     Object.entries(actions).forEach(([name, reducer]) => {
       if (typeof reducer !== "function") return;
-      const fn = (...args) => {
+      const fn = /* @__PURE__ */ __name((...args) => {
         try {
           const next = reducer(getSnapshot(false), ...args);
           if (next && typeof next === "object") {
@@ -1881,7 +1905,7 @@ function createStore(initialState = {}, actions = null) {
         } catch (e) {
           reportErrorSafe(e, { phase: "store.action", component: String(name) });
         }
-      };
+      }, "fn");
       store.actions[name] = fn;
       store[name] = fn;
     });
@@ -1905,7 +1929,7 @@ function createStore(initialState = {}, actions = null) {
       }
     } catch {
     }
-    const persistNow = () => {
+    const persistNow = /* @__PURE__ */ __name(() => {
       try {
         persistState.persisting = true;
         const snap = getSnapshot(false);
@@ -1915,9 +1939,9 @@ function createStore(initialState = {}, actions = null) {
       } finally {
         persistState.persisting = false;
       }
-    };
+    }, "persistNow");
     let debounceId = null;
-    const schedulePersist = () => {
+    const schedulePersist = /* @__PURE__ */ __name(() => {
       if (debounceMs <= 0) return persistNow();
       try {
         if (debounceId != null) clearTimeout(debounceId);
@@ -1927,7 +1951,7 @@ function createStore(initialState = {}, actions = null) {
         debounceId = null;
         persistNow();
       }, debounceMs);
-    };
+    }, "schedulePersist");
     persistState.enabled = true;
     persistState.key = storageKey;
     persistState.storage = st;
@@ -1964,6 +1988,7 @@ function createStore(initialState = {}, actions = null) {
   };
   return store;
 }
+__name(createStore, "createStore");
 const Store = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.defineProperty({
   __proto__: null,
   createStore
@@ -1978,12 +2003,12 @@ function render(Component, container) {
     reportError(e, { phase: "render", component: Component?.name ?? "App" });
   }
 }
+__name(render, "render");
 const index = {
   ...Signals,
   ...DOM,
   ...Lifecycle,
   ...Router,
-  ...Markdown$1,
   ...Errors,
   ...Suspense$1,
   ...Context,
@@ -1995,7 +2020,6 @@ export {
   ErrorProvider,
   Fragment,
   Link,
-  Markdown,
   NotFound,
   Page,
   Route,

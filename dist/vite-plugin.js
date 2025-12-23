@@ -1,3 +1,5 @@
+var __defProp = Object.defineProperty;
+var __name = (target, value) => __defProp(target, "name", { value, configurable: true });
 import fs from "node:fs";
 import path from "node:path";
 function transform(code, initialDepth = 0) {
@@ -70,10 +72,12 @@ function transform(code, initialDepth = 0) {
     }
     return null;
   }
+  __name(parseBlock, "parseBlock");
   function consumeWhitespace(str, idx) {
     while (idx < str.length && /\s/.test(str[idx])) idx++;
     return idx;
   }
+  __name(consumeWhitespace, "consumeWhitespace");
   function extractCondition(str, startIndex) {
     if (str[startIndex] !== "(") return null;
     let depth = 1;
@@ -93,6 +97,7 @@ function transform(code, initialDepth = 0) {
     if (depth !== 0) return null;
     return { cond: str.substring(startIndex + 1, j - 1), end: j };
   }
+  __name(extractCondition, "extractCondition");
   function handleIf(currI, isBare = false) {
     let startPtr = currI;
     if (!isBare) {
@@ -163,6 +168,7 @@ function transform(code, initialDepth = 0) {
     expr += elseContent ? `(<Fragment>${elseContent}</Fragment>)` : "null";
     return { end: endIdx, replacement: `{(() => ${expr})}` };
   }
+  __name(handleIf, "handleIf");
   function handleFor(currI, isBare = false) {
     let ptr = currI;
     if (!isBare) ptr = consumeWhitespace(code, currI + 1);
@@ -191,6 +197,7 @@ function transform(code, initialDepth = 0) {
     const replacement = `{(() => ${list}.map(${item} => (<Fragment>${transformedContent}</Fragment>)))}`;
     return { end: endIdx, replacement };
   }
+  __name(handleFor, "handleFor");
   function handleSwitch(currI, isBare = false) {
     let ptr = currI;
     if (!isBare) ptr = consumeWhitespace(code, currI + 1);
@@ -221,6 +228,7 @@ function transform(code, initialDepth = 0) {
     const replacement = `{function() { __ROUND_SWITCH_TOKEN__(${cond}) { ${finalContent} } }}`;
     return { end: endIdx, replacement };
   }
+  __name(handleSwitch, "handleSwitch");
   let inSingle = false, inDouble = false, inTemplate = false;
   let inCommentLine = false, inCommentMulti = false;
   while (i < code.length) {
@@ -380,6 +388,7 @@ function transform(code, initialDepth = 0) {
     }
     return -1;
   }
+  __name(findJsxTagEnd, "findJsxTagEnd");
   function transformSuspenseBlocks(str) {
     let out = str;
     let cursor = 0;
@@ -415,6 +424,7 @@ function transform(code, initialDepth = 0) {
     }
     return out;
   }
+  __name(transformSuspenseBlocks, "transformSuspenseBlocks");
   function transformProviderBlocks(str) {
     let out = str;
     let cursor = 0;
@@ -463,28 +473,35 @@ function transform(code, initialDepth = 0) {
     }
     return out;
   }
+  __name(transformProviderBlocks, "transformProviderBlocks");
   result = transformSuspenseBlocks(result);
   result = transformProviderBlocks(result);
   result = result.replace(/\{\s*([A-Za-z_$][\w$]*)\s*\(\s*\)\s*\}/g, "{() => $1()}").replace(/=\{\s*([A-Za-z_$][\w$]*)\s*\(\s*\)\s*\}/g, "={() => $1()}");
   return result.replace(/__ROUND_SWITCH_TOKEN__/g, "switch");
 }
+__name(transform, "transform");
 function normalizePath(p) {
   return p.replaceAll("\\", "/");
 }
+__name(normalizePath, "normalizePath");
 function isMdRawRequest(id) {
   return typeof id === "string" && id.includes(".md") && id.includes("?raw");
 }
+__name(isMdRawRequest, "isMdRawRequest");
 function stripQuery(id) {
   return id.split("?")[0];
 }
+__name(stripQuery, "stripQuery");
 function escapeForJsString(s) {
   return String(s).replaceAll("\\", "\\\\").replaceAll("`", "\\`").replaceAll("${", "\\${");
 }
+__name(escapeForJsString, "escapeForJsString");
 function resolveMaybeRelative(baseDir, p) {
   if (!p) return null;
   if (path.isAbsolute(p)) return p;
   return path.resolve(baseDir, p);
 }
+__name(resolveMaybeRelative, "resolveMaybeRelative");
 function inlineMarkdownInRound(code, fileAbs, addWatchFile) {
   if (typeof code !== "string" || typeof fileAbs !== "string") return code;
   const dir = path.dirname(fileAbs);
@@ -512,6 +529,7 @@ ${msg}`);
     }
   });
 }
+__name(inlineMarkdownInRound, "inlineMarkdownInRound");
 function isExcluded(fileAbsPath, excludeAbs) {
   const file = normalizePath(fileAbsPath);
   for (const pat of excludeAbs) {
@@ -521,6 +539,7 @@ function isExcluded(fileAbsPath, excludeAbs) {
   }
   return false;
 }
+__name(isExcluded, "isExcluded");
 function isIncluded(fileAbsPath, includeAbs) {
   if (!includeAbs.length) return true;
   const file = normalizePath(fileAbsPath);
@@ -531,6 +550,7 @@ function isIncluded(fileAbsPath, includeAbs) {
   }
   return false;
 }
+__name(isIncluded, "isIncluded");
 function RoundPlugin(pluginOptions = {}) {
   const state = {
     rootDir: process.cwd(),
@@ -581,6 +601,7 @@ function RoundPlugin(pluginOptions = {}) {
     state.includeAbs = Array.isArray(include) ? include.map((p) => resolveMaybeRelative(includeBase, p)).filter(Boolean) : [];
     state.excludeAbs = Array.isArray(exclude) ? exclude.map((p) => resolveMaybeRelative(excludeBase, p)).filter(Boolean) : [];
   }
+  __name(loadConfigOnce, "loadConfigOnce");
   function findBlock(str, startIndex) {
     let open = 0;
     let inSingle = false;
@@ -606,6 +627,7 @@ function RoundPlugin(pluginOptions = {}) {
     }
     return null;
   }
+  __name(findBlock, "findBlock");
   function parseStartHeadCallArgument(str, fromIndex) {
     const idx = str.indexOf("startHead", fromIndex);
     if (idx === -1) return null;
@@ -634,6 +656,7 @@ function RoundPlugin(pluginOptions = {}) {
     }
     return null;
   }
+  __name(parseStartHeadCallArgument, "parseStartHeadCallArgument");
   function parseStartHeadInDefaultExport(code) {
     const m = code.match(/export\s+default\s+function\b/);
     const hasAnyCall = /\bstartHead\s*\(/.test(code);
@@ -647,6 +670,7 @@ function RoundPlugin(pluginOptions = {}) {
     const call = parseStartHeadCallArgument(body, 0);
     return { headExpr: call ? call.arg : null, hasAny: hasAnyCall, hasOutside: hasAnyCall && !call };
   }
+  __name(parseStartHeadInDefaultExport, "parseStartHeadInDefaultExport");
   function headToHtml(head) {
     if (!head || typeof head !== "object") return "";
     let out = "";
@@ -656,10 +680,10 @@ function RoundPlugin(pluginOptions = {}) {
     }
     const meta = head.meta;
     const links = head.links;
-    const renderAttrs = (attrs) => {
+    const renderAttrs = /* @__PURE__ */ __name((attrs) => {
       if (!attrs || typeof attrs !== "object") return "";
       return Object.entries(attrs).filter(([, v]) => v !== null && v !== void 0).map(([k, v]) => ` ${k}="${String(v).replaceAll('"', "&quot;")}"`).join("");
-    };
+    }, "renderAttrs");
     if (Array.isArray(meta)) {
       meta.forEach((m) => {
         if (!m) return;
@@ -692,6 +716,7 @@ ${head.raw}`;
     }
     return out;
   }
+  __name(headToHtml, "headToHtml");
   return {
     name: "vite-plugin-round",
     enforce: "pre",
@@ -852,6 +877,7 @@ Found: ${trimmed.slice(0, 60)}...`));
     }
   };
 }
+__name(RoundPlugin, "RoundPlugin");
 export {
   RoundPlugin as default
 };

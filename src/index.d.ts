@@ -80,7 +80,8 @@ export const bindable: Bindable;
 export function untrack<T>(fn: () => T): T;
 
 /**
- * Create a reactive side-effect that runs whenever its signal dependencies change.
+ * Creates a reactive side-effect that runs whenever its signal dependencies change.
+ * Returns a function to manually stop the effect.
  */
 export function effect(fn: () => void | (() => void), options?: {
     /** If false, the effect won't run immediately on creation. Defaults to true. */
@@ -88,7 +89,7 @@ export function effect(fn: () => void | (() => void), options?: {
 }): () => void;
 
 /**
- * Create a reactive side-effect with explicit dependencies.
+ * Creates a reactive side-effect with explicit dependencies.
  */
 export function effect(deps: any[], fn: () => void | (() => void), options?: {
     /** If false, the effect won't run immediately on creation. Defaults to true. */
@@ -96,14 +97,39 @@ export function effect(deps: any[], fn: () => void | (() => void), options?: {
 }): () => void;
 
 /**
- * Create a read-only computed signal derived from other signals.
+ * Creates a read-only computed signal derived from other signals.
  */
 export function derive<T>(fn: () => T): () => T;
 
 /**
- * Create a read/write view of a specific path within a signal object.
+ * Creates a read/write view of a specific path within a signal object.
  */
 export function pick<T = any>(root: RoundSignal<any>, path: string | string[]): RoundSignal<T>;
+
+/**
+ * Lifecycle Hooks
+ */
+
+/**
+ * Runs a function when the component is mounted to the DOM.
+ * If the function returns another function, it will be used as an unmount cleanup.
+ */
+export function onMount(fn: () => void | (() => void)): void;
+
+/**
+ * Runs a function when the component is removed from the DOM.
+ */
+export function onUnmount(fn: () => void): void;
+
+/**
+ * Alias for onUnmount. Runs cleanup logic when the component is destroyed.
+ */
+export function onCleanup(fn: () => void): void;
+
+/**
+ * Runs a function after the component updates its DOM nodes.
+ */
+export function onUpdate(fn: () => void): void;
 
 /**
  * Store API
@@ -136,7 +162,7 @@ export interface RoundStore<T> {
      * Enable persistence for the store.
      */
     persist(storageKey: string, options?: {
-        /** The storage implementation (defaults to localStorage). */
+        /** The storage provider (defaults to localStorage). */
         storage?: Storage;
         /** Debounce time in milliseconds for writes. */
         debounce?: number;
@@ -172,12 +198,12 @@ export interface RouteProps {
     description?: string;
     /** Advanced head configuration including links and meta tags. */
     head?: any;
-    /** Fragment or elements to render when matched. */
+    /** Component or elements to render when matched. */
     children?: any;
 }
 
 /**
- * Define a route that renders its children when the path matches.
+ * Defines a route that renders its children when the path matches.
  */
 export function Route(props: RouteProps): any;
 
@@ -203,55 +229,55 @@ export interface LinkProps {
 }
 
 /**
- * A standard link component that performs SPA navigation.
+ * A link component that performs SPA navigation.
  */
 export function Link(props: LinkProps): any;
 
 /**
- * Define a fallback component or content for when no routes match.
+ * Defines a fallback component for when no routes match.
  */
 export function NotFound(props: {
-    /** Optional component to render for the 404 state. */
+    /** Component to render for the 404 state. */
     component?: any;
-    /** Fallback content. ignored if 'component' is provided. */
+    /** Fallback content. Ignored if 'component' is provided. */
     children?: any
 }): any;
 
 /**
- * Navigate to a different path programmatically.
+ * Navigates to a different path programmatically.
  */
 export function navigate(to: string, options?: {
-    /** If true, replaces the current history entry instead of pushing. */
+    /** If true, replaces the current history entry. */
     replace?: boolean
 }): void;
 
 /**
- * Hook to get a reactive function returning the current normalized pathname.
+ * Returns a reactive function that returns the current normalized pathname.
  */
 export function usePathname(): () => string;
 
 /**
- * Get the current normalized pathname.
+ * Gets the current normalized pathname.
  */
 export function getPathname(): string;
 
 /**
- * Hook to get a reactive function returning the current location object.
+ * Returns a reactive function that returns the current location object.
  */
 export function useLocation(): () => { pathname: string; search: string; hash: string };
 
 /**
- * Get the current location object (pathname, search, hash).
+ * Gets the current location object (pathname, search, hash).
  */
 export function getLocation(): { pathname: string; search: string; hash: string };
 
 /**
- * Hook to get a reactive function returning whether the current path has no matches.
+ * Returns a reactive function that returns whether the current path has no matches.
  */
 export function useIsNotFound(): () => boolean;
 
 /**
- * Get whether the current path is NOT matched by any defined route.
+ * Gets whether the current path is NOT matched by any defined route.
  */
 export function getIsNotFound(): boolean;
 
@@ -260,7 +286,7 @@ export function getIsNotFound(): boolean;
  */
 
 /**
- * Create a DOM element or instance a component.
+ * Creates a DOM element or instances a component.
  */
 export function createElement(tag: any, props?: any, ...children: any[]): any;
 
@@ -272,19 +298,19 @@ export function Fragment(props: { children?: any }): any;
 export interface Context<T> {
     /** Internal identifier for the context. */
     id: number;
-    /** Default value used when no Provider is found in the tree. */
+    /** Default value if no Provider is found. */
     defaultValue: T;
-    /** Component that provides a value to all its descendants. */
+    /** Component that provides a value to descendants. */
     Provider: (props: { value: T; children?: any }) => any;
 }
 
 /**
- * Create a new Context object for sharing state between components.
+ * Creates a new Context for sharing state between components.
  */
 export function createContext<T>(defaultValue?: T): Context<T>;
 
 /**
- * Read the current value of a context from the component tree.
+ * Reads the current context value from the component tree.
  */
 export function readContext<T>(ctx: Context<T>): T;
 
@@ -294,26 +320,45 @@ export function readContext<T>(ctx: Context<T>): T;
 export function bindContext<T>(ctx: Context<T>): () => T;
 
 /**
+ * Error Handling
+ */
+
+export interface ErrorBoundaryProps {
+    /** Content to render if an error occurs. Can be a signal or function. */
+    fallback?: any | ((props: { error: any }) => any);
+    /** Optional identifier for the boundary. */
+    name?: string;
+    /** Optional key that, when changed, resets the boundary error state. */
+    resetKey?: any;
+    /** Content that might throw an error. */
+    children?: any;
+}
+
+/**
+ * Component that catches runtime errors in its child tree and displays a fallback UI.
+ */
+export function ErrorBoundary(props: ErrorBoundaryProps): any;
+
+/**
  * Async & Code Splitting
  */
 
 /**
- * Mark a component for lazy loading (code-splitting).
- * Expects a function returning a dynamic import promise.
+ * Marks a component for lazy loading (code-splitting).
  */
 export function lazy<T>(fn: () => Promise<{ default: T } | T>): any;
 
 declare module "*.round";
 
 export interface SuspenseProps {
-    /** Content to show while children (e.g. lazy components) are loading. */
+    /** Content to show while children are loading. */
     fallback: any;
     /** Content that might trigger a loading state. */
     children?: any;
 }
 
 /**
- * Component that boundaries async operations and renders a fallback while loading.
+ * Component that renders a fallback UI while its children are loading.
  */
 export function Suspense(props: SuspenseProps): any;
 
@@ -322,20 +367,6 @@ export function Suspense(props: SuspenseProps): any;
  */
 
 /**
- * Define static head metadata (titles, meta tags, favicons, etc.).
+ * Defines static head metadata (titles, meta tags, etc.).
  */
 export function startHead(head: any): any;
-
-/**
- * Markdown
- */
-
-/**
- * Component that renders Markdown content into HTML.
- */
-export function Markdown(props: {
-    /** The markdown string or a function returning it. */
-    content: string | (() => string);
-    /** Remark/Rehype configuration options. */
-    options?: any
-}): any;

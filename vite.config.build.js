@@ -19,7 +19,6 @@ export default defineConfig({
         rollupOptions: {
             external: [
                 'vite',
-                'marked',
                 'node:fs', 'node:path', 'node:process', 'node:url', 'node:vm', 'node:util',
                 'fs', 'path', 'process', 'url', 'vm', 'util'
             ],
@@ -32,6 +31,9 @@ export default defineConfig({
                 }
             }
         },
+    },
+    esbuild: {
+        keepNames: true
     },
     plugins: [
         {

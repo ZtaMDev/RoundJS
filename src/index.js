@@ -2,7 +2,6 @@ export * from './runtime/signals.js';
 export * from './runtime/dom.js';
 export * from './runtime/lifecycle.js';
 export * from './runtime/router.js';
-export * from './runtime/markdown.js';
 export * from './runtime/errors.js';
 export * from './runtime/error-store.js';
 export * from './runtime/error-boundary.js';
@@ -14,7 +13,6 @@ import * as Signals from './runtime/signals.js';
 import * as DOM from './runtime/dom.js';
 import * as Lifecycle from './runtime/lifecycle.js';
 import * as Router from './runtime/router.js';
-import * as Markdown from './runtime/markdown.js';
 import * as Errors from './runtime/errors.js';
 import * as Suspense from './runtime/suspense.js';
 import * as Context from './runtime/context.js';
@@ -36,7 +34,6 @@ export default {
     ...DOM,
     ...Lifecycle,
     ...Router,
-    ...Markdown,
     ...Errors,
     ...Suspense,
     ...Context,

@@ -1,4 +1,6 @@
 #!/usr/bin/env node
+var __defProp = Object.defineProperty;
+var __name = (target, value) => __defProp(target, "name", { value, configurable: true });
 import path from "node:path";
 import fs from "node:fs";
 import process from "node:process";
@@ -8,6 +10,7 @@ import RoundPlugin from "./vite-plugin.js";
 function onSignal() {
   process.exit(0);
 }
+__name(onSignal, "onSignal");
 process.on("SIGINT", onSignal);
 process.on("SIGTERM", onSignal);
 process.on("exit", () => {
@@ -23,9 +26,11 @@ function cleanupTemporaryFiles() {
   }
   temporaryFiles.clear();
 }
+__name(cleanupTemporaryFiles, "cleanupTemporaryFiles");
 function normalizePath(p) {
   return p.replaceAll("\\", "/");
 }
+__name(normalizePath, "normalizePath");
 const colors = {
   reset: "\x1B[0m",
   dim: "\x1B[2m",
@@ -41,7 +46,11 @@ const colors = {
 function c(text, color) {
   return `${colors[color] ?? ""}${text}${colors.reset}`;
 }
+__name(c, "c");
 class CliError extends Error {
+  static {
+    __name(this, "CliError");
+  }
   constructor(message, options = {}) {
     super(message);
     this.name = "CliError";
@@ -55,6 +64,7 @@ function printError(message) {
   process.stderr.write(`${c("Error:", "red")} ${msg}
 `);
 }
+__name(printError, "printError");
 function getRoundVersion() {
   try {
     const here = path.dirname(fileURLToPath(import.meta.url));
@@ -66,6 +76,7 @@ function getRoundVersion() {
     return null;
   }
 }
+__name(getRoundVersion, "getRoundVersion");
 function banner(title) {
   const v = getRoundVersion();
   const name = c("ROUND", "cyan");
@@ -76,12 +87,13 @@ function banner(title) {
   process.stdout.write(`
 `);
 }
+__name(banner, "banner");
 function createViteLogger() {
   let hasError = false;
-  const noop = () => {
-  };
+  const noop = /* @__PURE__ */ __name(() => {
+  }, "noop");
   return {
-    hasErrorLogged: () => hasError,
+    hasErrorLogged: /* @__PURE__ */ __name(() => hasError, "hasErrorLogged"),
     info(msg) {
       const s = String(msg ?? "");
       if (!s) return;
@@ -114,6 +126,7 @@ function createViteLogger() {
     }
   };
 }
+__name(createViteLogger, "createViteLogger");
 function printUrls(resolvedUrls, base = "/", ms = null) {
   const local = resolvedUrls?.local?.[0];
   const network = resolvedUrls?.network?.[0];
@@ -130,11 +143,13 @@ function printUrls(resolvedUrls, base = "/", ms = null) {
   process.stdout.write(`
 `);
 }
+__name(printUrls, "printUrls");
 function resolveFrom(baseDir, p) {
   if (!p) return null;
   if (path.isAbsolute(p)) return p;
   return path.resolve(baseDir, p);
 }
+__name(resolveFrom, "resolveFrom");
 function parseArgs(argv) {
   const args = { _: [] };
   for (let i = 0; i < argv.length; i++) {
@@ -166,6 +181,7 @@ function parseArgs(argv) {
   }
   return args;
 }
+__name(parseArgs, "parseArgs");
 function printHelp() {
   const header = `${c("round", "cyan")} ${c("(CLI)", "gray")}`;
   process.stdout.write(
@@ -186,15 +202,18 @@ function printHelp() {
     ].join("\n")
   );
 }
+__name(printHelp, "printHelp");
 function ensureDir(dir) {
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
 }
+__name(ensureDir, "ensureDir");
 function writeFileIfMissing(filePath, content) {
   if (fs.existsSync(filePath)) {
     throw new Error(`File already exists: ${filePath}`);
   }
   fs.writeFileSync(filePath, content, "utf8");
 }
+__name(writeFileIfMissing, "writeFileIfMissing");
 async function runInit({ name }) {
   if (!name || typeof name !== "string") {
     throw new CliError(
@@ -327,15 +346,18 @@ ${c("Project created:", "green")} ${projectDir}
 
 `);
 }
+__name(runInit, "runInit");
 function loadRoundConfig(configPathAbs) {
   const raw = fs.readFileSync(configPathAbs, "utf8");
   const json = JSON.parse(raw);
   return json && typeof json === "object" ? json : {};
 }
+__name(loadRoundConfig, "loadRoundConfig");
 function coerceNumber(v, fallback) {
   const n = Number(v);
   return Number.isFinite(n) ? n : fallback;
 }
+__name(coerceNumber, "coerceNumber");
 function generateIndexHtml(config) {
   const name = config?.name ?? "Round";
   const rawEntry = config?.entry ?? "./src/app.round";
@@ -362,6 +384,7 @@ function generateIndexHtml(config) {
     "</html>"
   ].join("\n");
 }
+__name(generateIndexHtml, "generateIndexHtml");
 function writeTemporaryIndex(rootDir, config) {
   const indexPath = path.resolve(rootDir, "index.html");
   if (fs.existsSync(indexPath)) return false;
@@ -370,6 +393,7 @@ function writeTemporaryIndex(rootDir, config) {
   temporaryFiles.add(indexPath);
   return true;
 }
+__name(writeTemporaryIndex, "writeTemporaryIndex");
 async function runDev({ rootDir, configPathAbs, config }) {
   const startedAt = Date.now();
   const configDir = path.dirname(configPathAbs);
@@ -381,7 +405,7 @@ async function runDev({ rootDir, configPathAbs, config }) {
   let viteServer = null;
   let restarting = false;
   let restartTimer = null;
-  const startServer = async (nextConfig, { showBanner, showReady } = { showBanner: true, showReady: true }) => {
+  const startServer = /* @__PURE__ */ __name(async (nextConfig, { showBanner, showReady } = { showBanner: true, showReady: true }) => {
     const cfgDir = path.dirname(configPathAbs);
     const entryAbs2 = nextConfig?.entry ? resolveFrom(cfgDir, nextConfig.entry) : null;
     if (!entryAbs2 || !fs.existsSync(entryAbs2)) {
@@ -424,7 +448,7 @@ async function runDev({ rootDir, configPathAbs, config }) {
       printUrls(server.resolvedUrls, base2, ms);
     }
     return server;
-  };
+  }, "startServer");
   viteServer = await startServer(config, { showBanner: true, showReady: true });
   if (typeof fs.watch === "function") {
     try {
@@ -451,6 +475,7 @@ ${c("[round]", "cyan")} ${c("config changed", "gray")} ${c("restarting dev serve
     }
   }
 }
+__name(runDev, "runDev");
 async function runBuild({ rootDir, configPathAbs, config }) {
   const startedAt = Date.now();
   const configDir = path.dirname(configPathAbs);
@@ -491,6 +516,7 @@ async function runBuild({ rootDir, configPathAbs, config }) {
 
 `);
 }
+__name(runBuild, "runBuild");
 async function runPreview({ rootDir, configPathAbs, config }) {
   const configDir = path.dirname(configPathAbs);
   const outDir = config?.output ? resolveFrom(configDir, config.output) : resolveFrom(rootDir, "./dist");
@@ -530,6 +556,7 @@ async function runPreview({ rootDir, configPathAbs, config }) {
   });
   printUrls(server.resolvedUrls, base);
 }
+__name(runPreview, "runPreview");
 async function main() {
   const args = parseArgs(process.argv.slice(2));
   const cmd = args._[0];
@@ -567,6 +594,7 @@ ${String(e?.message ?? e)}`, { code: 1 });
     await runPreview({ rootDir, configPathAbs, config });
   }
 }
+__name(main, "main");
 main().catch((e) => {
   if (e && e.name === "CliError") {
     printError(e.message);
