@@ -1,16 +1,22 @@
 {
     "name": "round-core",
-    "version": "0.1.2",
+    "version": "0.1.3",
     "description": "A lightweight frontend framework for SPA with signals and fine grained reactivity",
-    "main": "./dist/index.js",
-    "types": "./dist/index.d.ts",
+    "main": "./src/index.js",
+    "types": "./src/index.d.ts",
     "readme": "README.md",
     "exports": {
-        ".": "./dist/index.js",
-        "./vite-plugin": "./dist/vite-plugin.js"
+        ".": {
+            "types": "./src/index.d.ts",
+            "default": "./src/index.js"
+        },
+        "./vite-plugin": {
+            "types": "./src/compiler/vite-plugin.d.ts",
+            "default": "./src/compiler/vite-plugin.js"
+        }
     },
     "files": [
-        "dist",
+        "src",
         "README.md",
         "LICENSE"
     ],
@@ -20,12 +26,11 @@
         "url": "https://github.com/ZtaMDev/RoundJS.git"
     },
     "bin": {
-        "round": "./dist/cli.js"
+        "round": "./src/cli.js"
     },
     "scripts": {
         "dev": "node ./src/cli.js dev --config ./test/main/round.config.json",
         "build": "node ./src/cli.js build --config ./test/main/round.config.json",
-        "build:core": "vite build -c vite.config.build.js",
         "bench": "bun run --cwd benchmarks bench",
         "bench:build": "bun run --cwd benchmarks bench:build",
         "bench:runtime": "bun run --cwd benchmarks bench:runtime"
