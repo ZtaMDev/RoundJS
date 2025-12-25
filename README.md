@@ -9,7 +9,7 @@
 </p>
 
 <h3 align="center">
-  <em><b>Round</b> is a lightweight, DOM-first framework for building SPAs with fine-grained reactivity, no Virtual DOM, and fast, predictable updates powered by signals.</em>
+  <em><b>Round</b> is a lightweight, DOM-first framework for building SPAs with fine-grained reactivity, and fast, predictable updates powered by signals and bindables</em>
 </h3>
 
 
