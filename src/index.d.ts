@@ -102,6 +102,92 @@ export function effect(deps: any[], fn: () => void | (() => void), options?: {
 export function derive<T>(fn: () => T): () => T;
 
 /**
+ * Async signal that loads data from an async function.
+ * Provides reactive pending/error states and refetch capability.
+ */
+export interface AsyncSignal<T> {
+    /**
+     * Get the current resolved value, or set a new value.
+     * Returns undefined while pending or if an error occurred.
+     */
+    (newValue?: T): T | undefined;
+
+    /**
+     * Get the current value (reactive).
+     */
+    value: T | undefined;
+
+    /**
+     * Get the current value without tracking dependencies.
+     */
+    peek(): T | undefined;
+
+    /**
+     * Signal indicating whether the async function is currently executing.
+     * @example
+     * if (user.pending()) {
+     *   return <Spinner />;
+     * }
+     */
+    pending: RoundSignal<boolean>;
+
+    /**
+     * Signal containing the error if the async function rejected.
+     * Returns null if no error occurred.
+     * @example
+     * if (user.error()) {
+     *   return <div>Error: {user.error().message}</div>;
+     * }
+     */
+    error: RoundSignal<Error | null>;
+
+    /**
+     * Re-execute the async function to refresh the data.
+     * Resets pending to true and clears any previous error.
+     * @returns Promise that resolves to the new value
+     * @example
+     * <button onClick={() => user.refetch()}>Refresh</button>
+     */
+    refetch(): Promise<T | undefined>;
+}
+
+/**
+ * Options for asyncSignal.
+ */
+export interface AsyncSignalOptions {
+    /**
+     * If true (default), executes the async function immediately on creation.
+     * If false, you must call refetch() to start loading.
+     */
+    immediate?: boolean;
+}
+
+/**
+ * Creates an async signal that loads data from an async function.
+ * The signal provides reactive pending and error states, plus a refetch method.
+ * 
+ * @param asyncFn - Async function that returns a promise
+ * @param options - Configuration options
+ * @returns AsyncSignal with pending, error, and refetch properties
+ * 
+ * @example
+ * const user = asyncSignal(() => fetch('/api/user').then(r => r.json()));
+ * 
+ * // In component:
+ * {if(user.pending()) {
+ *     <Spinner />
+ * } else if(user.error()) {
+ *     <Error message={user.error().message} />
+ * } else {
+ *     <Profile user={user()} />
+ * }}
+ * 
+ * // Refetch on demand:
+ * <button onClick={() => user.refetch()}>Refresh</button>
+ */
+export function asyncSignal<T>(asyncFn: () => Promise<T>, options?: AsyncSignalOptions): AsyncSignal<T>;
+
+/**
  * Creates a read/write view of a specific path within a signal object.
  */
 export function pick<T = any>(root: RoundSignal<any>, path: string | string[]): RoundSignal<T>;

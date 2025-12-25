@@ -311,6 +311,96 @@ export function bindable(initialValue) {
     return attachHelpers(s);
 }
 
+/**
+ * Create an async signal that loads data from an async function.
+ * Provides pending, error, and refetch capabilities.
+ * @param {Function} asyncFn - Async function that returns a promise
+ * @param {Object} options - Options: { immediate: true }
+ */
+export function asyncSignal(asyncFn, options = {}) {
+    if (typeof asyncFn !== 'function') {
+        throw new Error('[round] asyncSignal() expects an async function.');
+    }
+
+    const immediate = options.immediate !== false;
+    const data = signal(undefined);
+    const pending = signal(immediate);
+    const error = signal(null);
+
+    let currentPromise = null;
+
+    async function execute() {
+        pending(true);
+        error(null);
+
+        try {
+            const promise = asyncFn();
+            currentPromise = promise;
+
+            if (!isPromiseLike(promise)) {
+                // Sync result
+                data(promise);
+                pending(false);
+                return promise;
+            }
+
+            const result = await promise;
+
+            // Only update if this is still the current request
+            if (currentPromise === promise) {
+                data(result);
+                pending(false);
+            }
+
+            return result;
+        } catch (e) {
+            if (currentPromise !== null) {
+                error(e);
+                pending(false);
+            }
+            return undefined;
+        }
+    }
+
+    // The main signal function - returns current data value
+    const s = function (newValue) {
+        if (arguments.length > 0) {
+            return data(newValue);
+        }
+        if (context) {
+            // Subscribe to all three signals for reactivity
+            data();
+        }
+        return data.peek();
+    };
+
+    s.peek = () => data.peek();
+
+    Object.defineProperty(s, 'value', {
+        enumerable: true,
+        configurable: true,
+        get() { return s(); },
+        set(v) { data(v); }
+    });
+
+    // Expose pending and error as signals
+    s.pending = pending;
+    s.error = error;
+
+    // Refetch function
+    s.refetch = execute;
+
+    // Mark as async signal
+    s.__asyncSignal = true;
+
+    // Execute immediately if requested
+    if (immediate) {
+        execute();
+    }
+
+    return s;
+}
+
 function getIn(obj, path) {
     let cur = obj;
     for (let i = 0; i < path.length; i++) {
