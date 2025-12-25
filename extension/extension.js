@@ -51,6 +51,12 @@ function activate(context) {
                     member: "signal"
                 },
                 {
+                    label: 'round:asyncSignal',
+                    detail: 'Create an asyncSignal()',
+                    body: "const ${1:data} = asyncSignal(async () => {\n\t$0\n});",
+                    member: "asyncSignal"
+                },
+                {
                     label: 'round:bindable',
                     detail: 'Create a bindable()',
                     body: "const ${1:name} = bindable(${2:initial});$0",
@@ -93,6 +99,16 @@ function activate(context) {
                     label: 'round:for',
                     detail: 'Round JSX superset for-in block',
                     body: "{for(${1:item} in ${2:list}){\n\t$0\n}}",
+                },
+                {
+                    label: 'round:try',
+                    detail: 'Round JSX try/catch block',
+                    body: "{try {\n\t$0\n} catch(e) {\n\t\n}}",
+                },
+                {
+                    label: 'round:tryreactive',
+                    detail: 'Round JSX reactive try(signal) block',
+                    body: "{try(${1:signal()}) {\n\t$0\n} catch(e) {\n\t\n}}",
                 }
             ];
 

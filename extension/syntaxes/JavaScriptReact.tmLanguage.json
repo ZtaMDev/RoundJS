@@ -359,6 +359,42 @@
 							"include": "#decl-block"
 						}
 					]
+				},
+				{
+					"name": "meta.round.controlflow.try.js.jsx",
+					"begin": "(?<!\\.)\\btry(?=\\s*[\\({])",
+					"beginCaptures": {
+						"0": {
+							"name": "keyword.control.trycatch.js.jsx"
+						}
+					},
+					"end": "(?<=\\})",
+					"patterns": [
+						{
+							"include": "#paren-expression"
+						},
+						{
+							"include": "#decl-block"
+						}
+					]
+				},
+				{
+					"name": "meta.round.controlflow.catch.js.jsx",
+					"begin": "(?<!\\.)\\bcatch(?=\\s*[\\({])",
+					"beginCaptures": {
+						"0": {
+							"name": "keyword.control.trycatch.js.jsx"
+						}
+					},
+					"end": "(?<=\\})",
+					"patterns": [
+						{
+							"include": "#paren-expression"
+						},
+						{
+							"include": "#decl-block"
+						}
+					]
 				}
 			]
 		},

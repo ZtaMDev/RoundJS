@@ -1,8 +1,7 @@
 import { effect, untrack } from './signals.js';
 import { runInLifecycle, createComponentInstance, mountComponent, initLifecycleRoot } from './lifecycle.js';
 import { reportErrorSafe } from './error-reporter.js';
-import { captureContext, runInContext, readContext } from './context.js';
-import { SuspenseContext } from './suspense.js';
+import { captureContext, runInContext, readContext, SuspenseContext } from './context-shared.js';
 
 
 const warnedSignals = new Set();
@@ -54,8 +53,9 @@ export function createElement(tag, props = {}, ...children) {
                     }
                     throw e;
                 }
+
                 reportErrorSafe(e, { phase: 'component.render', component: componentName });
-                return createElement('div', { style: { padding: '16px' } }, `Error in ${componentName}`);
+                throw e;
             }
         });
 
@@ -341,8 +341,9 @@ function appendChild(parent, child) {
                         }
                         throw new Error("cannot instance a lazy component outside a suspense");
                     }
+
                     reportErrorSafe(e, { phase: 'child.dynamic' });
-                    val = createElement('div', { style: { padding: '16px' } }, 'Error');
+                    throw e;
                 }
 
                 if (Array.isArray(val)) {

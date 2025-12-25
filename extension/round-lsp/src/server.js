@@ -268,6 +268,37 @@ function mapSeverity(category) {
     }
 }
 
+function mapCompletionKind(kind) {
+    switch (kind) {
+        case ts.ScriptElementKind.keyword: return 14;
+        case ts.ScriptElementKind.scriptElement: return 17;
+        case ts.ScriptElementKind.moduleElement: return 9;
+        case ts.ScriptElementKind.classElement:
+        case ts.ScriptElementKind.localClassElement: return 7;
+        case ts.ScriptElementKind.interfaceElement:
+        case ts.ScriptElementKind.typeElement: return 8;
+        case ts.ScriptElementKind.enumElement: return 13;
+        case ts.ScriptElementKind.enumMemberElement: return 20;
+        case ts.ScriptElementKind.variableElement:
+        case ts.ScriptElementKind.localVariableElement:
+        case ts.ScriptElementKind.letElement:
+        case ts.ScriptElementKind.parameterElement: return 6;
+        case ts.ScriptElementKind.constElement: return 21;
+        case ts.ScriptElementKind.functionElement:
+        case ts.ScriptElementKind.localFunctionElement: return 3;
+        case ts.ScriptElementKind.memberFunctionElement: return 2;
+        case ts.ScriptElementKind.memberGetAccessorElement:
+        case ts.ScriptElementKind.memberSetAccessorElement: return 10;
+        case ts.ScriptElementKind.memberVariableElement: return 5;
+        case ts.ScriptElementKind.constructorImplementationElement: return 4;
+        case ts.ScriptElementKind.typeParameterElement: return 25;
+        case ts.ScriptElementKind.string: return 1;
+        case ts.ScriptElementKind.alias: return 18;
+        case ts.ScriptElementKind.jsxAttribute: return 5;
+        default: return 1;
+    }
+}
+
 connection.onHover((params) => {
     try {
         const vdoc = virtualDocs.get(params.textDocument.uri);
@@ -297,7 +328,7 @@ connection.onCompletion((params) => {
         if (!completions) return null;
         return completions.entries.map(entry => ({
             label: entry.name,
-            kind: (entry.kind === ts.ScriptElementKind.variableElement) ? 6 : (entry.kind === ts.ScriptElementKind.functionElement ? 3 : 1),
+            kind: mapCompletionKind(entry.kind),
             data: { uri: params.textDocument.uri, offset, name: entry.name }
         }));
     } catch (e) { return null; }

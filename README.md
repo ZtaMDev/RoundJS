@@ -173,6 +173,39 @@ effect(() => {
 name('Grace');
 ```
 
+### `asyncSignal(fetcher)`
+
+Create a signal that manages asynchronous data fetching.
+
+- It returns a signal that resolves to the data once fetched.
+- **`.pending`**: A reactive signal (boolean) indicating if the fetch is in progress.
+- **`.error`**: A reactive signal containing any error that occurred during fetching.
+- **`.refetch()`**: A method to manually trigger a re-fetch.
+
+```jsx
+import { asyncSignal } from 'round-core';
+
+const user = asyncSignal(async () => {
+    const res = await fetch('/api/user');
+    return res.json();
+});
+
+export function UserProfile() {
+    return (
+        <div>
+            {if(user.pending()){
+                <div>Loading...</div>
+            } else if(user.error()){
+                <div>Error: {user.error().message}</div>
+            } else {
+                <div>Welcome, {user().name}</div>
+            }}
+            <button onClick={() => user.refetch()}>Reload</button>
+        </div>
+    );
+}
+```
+
 ### `untrack(fn)`
 
 Run a function without tracking any signals it reads.
@@ -395,6 +428,25 @@ Notes:
 - The `switch` expression is automatically wrapped in a reactive tracker, ensuring that the view updates surgically when the condition (e.g., a signal) changes.
 - Each case handles its own rendering without re-running the parent component.
 
+### `try / catch`
+
+Round supports both static and **reactive** `try/catch` blocks inside JSX.
+
+- **Static**: Just like standard JS, but renders fragments.
+- **Reactive**: By passing a signal to `try(signal)`, the block will **automatically re-run** if the signal (or its dependencies) update. This is perfect for handling transient errors in async data.
+
+```jsx
+{try(user()) {
+    {if(user() && user().name) {
+        <div>Hello {user().name}</div>
+    } else if(user.pending()) {
+        <div>⏳ Loading...</div>
+    }}
+} catch(e) {
+    <div className="error"> Failed to load user: {e.message} </div>
+}}
+```
+
 ## Routing
 
 Round includes router primitives intended for SPA navigation. All route paths must start with a forward slash `/`.
@@ -462,26 +514,14 @@ const LazyWidget = lazy(() => import('./Widget'));
 
 ## Error handling
 
-Round aims to provide strong developer feedback:
+Round JS favors individual error control and standard browser debugging:
 
-- Runtime error reporting with safe boundaries.
-- `ErrorBoundary` to catch render-time errors and show a fallback.
+1.  **Explict `try/catch`**: Use the JSX `try/catch` syntax to handle local component failures gracefully.
+2.  **Console-First Reporting**: Unhandled errors in component rendering or reactive effects are logged to the browser console with descriptive metadata (component name, render phase) and then allowed to propagate.
+3.  **No Intrusive Overlays**: Round has removed conflicting global error boundaries to ensure that your local handling logic always takes precedence and the developer experience remains clean.
 
-### `ErrorBoundary`
-
-Wrap components to prevent the whole app from crashing if a child fails to render.
-
-```jsx
-import { ErrorBoundary } from 'round-core';
-
-function DangerousComponent() {
-    throw new Error('Boom!');
-}
-
-<ErrorBoundary fallback={(err) => <div className="error">Something went wrong: {err.message}</div>}>
-    <DangerousComponent />
-</ErrorBoundary>
-```
+Example of a descriptive console log:
+`[round] Error in phase "component.render" of component <UserProfile />: TypeError: Cannot read property 'avatar' of undefined`
 
 ## CLI
 

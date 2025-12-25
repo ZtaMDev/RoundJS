@@ -6,7 +6,7 @@ function isPromiseLike(v) {
     return v && (typeof v === 'object' || typeof v === 'function') && typeof v.then === 'function';
 }
 
-const SuspenseContext = createContext(null);
+import { SuspenseContext } from './context-shared.js';
 export { SuspenseContext };
 
 export function lazy(loader) {

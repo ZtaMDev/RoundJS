@@ -262,6 +262,81 @@ export function transform(code, initialDepth = 0) {
         return { end: endIdx, replacement };
     }
 
+    function handleTry(currI, isBare = false) {
+        let ptr = currI;
+        if (!isBare) ptr = consumeWhitespace(code, currI + 1);
+
+        if (!code.startsWith('try', ptr)) return null;
+        ptr += 3;
+        ptr = consumeWhitespace(code, ptr);
+
+        // Check for reactive try: try(expr) {...}
+        let reactiveExpr = null;
+        if (code[ptr] === '(') {
+            const condRes = extractCondition(code, ptr);
+            if (condRes) {
+                reactiveExpr = condRes.cond;
+                ptr = consumeWhitespace(code, condRes.end);
+            }
+        }
+
+        // Must have opening brace for try block
+        if (code[ptr] !== '{') return null;
+
+        const tryBlock = parseBlock(code, ptr);
+        if (!tryBlock) return null;
+
+        const tryContent = code.substring(tryBlock.start + 1, tryBlock.end);
+        const transformedTry = transform(tryContent, 1);
+
+        ptr = tryBlock.end + 1;
+        ptr = consumeWhitespace(code, ptr);
+
+        // Must have catch
+        if (!code.startsWith('catch', ptr)) return null;
+        ptr += 5;
+        ptr = consumeWhitespace(code, ptr);
+
+        // Extract catch parameter (e) or (err)
+        let catchParam = 'e';
+        if (code[ptr] === '(') {
+            const catchCondRes = extractCondition(code, ptr);
+            if (catchCondRes) {
+                catchParam = catchCondRes.cond.trim() || 'e';
+                ptr = consumeWhitespace(code, catchCondRes.end);
+            }
+        }
+
+        // Must have catch block
+        if (code[ptr] !== '{') return null;
+
+        const catchBlock = parseBlock(code, ptr);
+        if (!catchBlock) return null;
+
+        const catchContent = code.substring(catchBlock.start + 1, catchBlock.end);
+        const transformedCatch = transform(catchContent, 1);
+
+        let endIdx = catchBlock.end + 1;
+
+        // If not bare, consume closing '}'
+        if (!isBare) {
+            endIdx = consumeWhitespace(code, endIdx);
+            if (code[endIdx] !== '}') return null;
+            endIdx++;
+        }
+
+        let replacement;
+        if (reactiveExpr) {
+            // Reactive try: return a THUNK (function) so dom.js handles it as a reactive child (effect)
+            replacement = `{() => { try { ${reactiveExpr}; return (<Fragment>${transformedTry}</Fragment>); } catch(${catchParam}) { return (<Fragment>${transformedCatch}</Fragment>); } }}`;
+        } else {
+            // Static try: simple IIFE
+            replacement = `{(() => { try { return (<Fragment>${transformedTry}</Fragment>); } catch(${catchParam}) { return (<Fragment>${transformedCatch}</Fragment>); } })()}`;
+        }
+
+        return { end: endIdx, replacement };
+    }
+
     // --- Main Parser Loop ---
 
     let inSingle = false, inDouble = false, inTemplate = false;
@@ -397,6 +472,9 @@ export function transform(code, initialDepth = 0) {
                 } else if (code.startsWith('switch', ptr)) {
                     const res = handleSwitch(i, false);
                     if (res) { result += res.replacement; i = res.end; processed = true; }
+                } else if (code.startsWith('try', ptr)) {
+                    const res = handleTry(i, false);
+                    if (res) { result += res.replacement; i = res.end; processed = true; }
                 }
             }
 
@@ -419,6 +497,13 @@ export function transform(code, initialDepth = 0) {
                 let ptr = consumeWhitespace(code, i + 6);
                 if (code[ptr] === '(') {
                     const res = handleSwitch(i, true);
+                    if (res) { result += res.replacement; i = res.end; processed = true; }
+                }
+            } else if (ch === 't' && code.startsWith('try', i)) {
+                // Bare try: try { ... } catch { ... } or try(expr) { ... } catch { ... }
+                let ptr = consumeWhitespace(code, i + 3);
+                if (code[ptr] === '{' || code[ptr] === '(') {
+                    const res = handleTry(i, true);
                     if (res) { result += res.replacement; i = res.end; processed = true; }
                 }
             }

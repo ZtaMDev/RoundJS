@@ -1,5 +1,6 @@
 import { onMount, triggerUpdate, getCurrentComponent } from './lifecycle.js';
 import { reportErrorSafe } from './error-reporter.js';
+import { readContext } from './context-shared.js';
 
 let context = null;
 let batchCount = 0;
@@ -143,10 +144,10 @@ export function effect(arg1, arg2, arg3) {
                 }
                 const res = callback();
                 if (typeof res === 'function') this._cleanup = res;
-                if (owner?.isMounted) triggerUpdate(owner);
             } catch (e) {
-                if (!isPromiseLike(e)) reportErrorSafe(e, { phase: 'effect', component: owner?.name });
-                else throw e;
+                if (isPromiseLike(e)) throw e;
+                reportErrorSafe(e, { phase: 'effect', component: owner?.name });
+                throw e;
             } finally {
                 context = prev;
             }
@@ -368,8 +369,10 @@ export function asyncSignal(asyncFn, options = {}) {
             return data(newValue);
         }
         if (context) {
-            // Subscribe to all three signals for reactivity
+            // Subscribe to all internal signals so any change triggers a re-run
             data();
+            pending();
+            error();
         }
         return data.peek();
     };

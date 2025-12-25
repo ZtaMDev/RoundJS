@@ -6,8 +6,9 @@ function transformLSP(code, filename = 'file.round') {
     const editedRanges = [];
 
     const VIRTUAL_IMPORT = `// @ts-nocheck
-import { Fragment, createElement } from 'round-core';
+import { Fragment, createElement, NoErrorReport } from 'round-core';
 const React = { createElement, Fragment };
+function NoErrorReport({ children }: { children?: any }) { return null; }
 
 declare global {
     namespace JSX {
@@ -344,6 +345,74 @@ declare global {
         applyOverlapOverwrite(start, i + 1, `{(() => ${list}.map(${item} => (<Fragment>`);
         applyOverlapOverwrite(block.end, outer.end + 1, '</Fragment>)))}');
         forExprRegex.lastIndex = start + 1;
+    }
+
+    // TRY/CATCH - with context check
+    const tryExprRegex = /\{\s*try\s*[\(\{]/g;
+    while ((match = tryExprRegex.exec(currentCode)) !== null) {
+        const ctx = getJsxContext(currentCode, match.index);
+        if (!ctx.shouldTransform) continue; // SAFETY GUARD
+        const start = match.index;
+        const outer = parseBlock(currentCode, start);
+        if (!outer) continue;
+
+        let i = consumeWhitespace(currentCode, start + 1);
+        if (!currentCode.slice(i).startsWith('try')) continue;
+        i += 3;
+        i = consumeWhitespace(currentCode, i);
+
+        // Check for reactive try: try(expr) {...}
+        let reactiveExpr = null;
+        if (currentCode[i] === '(') {
+            const condResult = extractCondition(currentCode, i);
+            if (condResult) {
+                reactiveExpr = condResult.cond;
+                i = consumeWhitespace(currentCode, condResult.end);
+            }
+        }
+
+        // Must have opening brace for try block
+        if (currentCode[i] !== '{') continue;
+
+        const tryBlock = parseBlock(currentCode, i);
+        if (!tryBlock) continue;
+
+        let j = consumeWhitespace(currentCode, tryBlock.end + 1);
+
+        // Must have catch
+        if (!currentCode.slice(j).startsWith('catch')) continue;
+        j += 5;
+        j = consumeWhitespace(currentCode, j);
+
+        // Extract catch parameter
+        let catchParam = 'e';
+        if (currentCode[j] === '(') {
+            const catchCondResult = extractCondition(currentCode, j);
+            if (catchCondResult) {
+                catchParam = catchCondResult.cond.trim() || 'e';
+                j = consumeWhitespace(currentCode, catchCondResult.end);
+            }
+        }
+
+        // Must have catch block
+        if (currentCode[j] !== '{') continue;
+
+        const catchBlock = parseBlock(currentCode, j);
+        if (!catchBlock) continue;
+
+        // Apply transformations
+        if (reactiveExpr) {
+            // Reactive try: {() => { try { expr; return (<Fragment>...</Fragment>); } catch(e) { return (<Fragment>...</Fragment>); } }}
+            applyOverlapOverwrite(start, i + 1, `{() => { try { ${reactiveExpr}; return (<Fragment>`);
+            applyOverlapOverwrite(tryBlock.end, j + 1, `</Fragment>); } catch(${catchParam}) { return (<Fragment>`);
+            applyOverlapOverwrite(catchBlock.end, outer.end + 1, '</Fragment>); } }}');
+        } else {
+            // Static try: {(() => { try { return (<Fragment>...</Fragment>); } catch(e) { return (<Fragment>...</Fragment>); } })()}
+            applyOverlapOverwrite(start, i + 1, '{(() => { try { return (<Fragment>');
+            applyOverlapOverwrite(tryBlock.end, j + 1, `</Fragment>); } catch(${catchParam}) { return (<Fragment>`);
+            applyOverlapOverwrite(catchBlock.end, outer.end + 1, '</Fragment>); } })()}');
+        }
+        tryExprRegex.lastIndex = start + 1;
     }
 
     // SIGNALS - with context check

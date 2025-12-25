@@ -1,6 +1,6 @@
 {
     "name": "round-core",
-    "version": "0.1.3",
+    "version": "0.1.4",
     "description": "A lightweight frontend framework for SPA with signals and fine grained reactivity",
     "main": "./src/index.js",
     "types": "./src/index.d.ts",

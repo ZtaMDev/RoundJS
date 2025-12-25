@@ -16,7 +16,7 @@
 Complete Language Server support for `.round` files, powered by a high-performance **On-Demand Architecture**.
 - **On-Demand Loading**: The extension only processes the files you are actually working on, making it ultra-light and near-instant on startup.
 - **No-Wait Hovers**: Synchronous on-demand transformation eliminates "Loading" glitches. Get instant type information for signals, bindables, and props.
-- **Precision Mapping**: Error squiggles, hovers, and definitions align perfectly with your source code, even inside complex `if`, `switch`, and `for` blocks.
+- **Precision Mapping**: Error squiggles, hovers, and definitions align perfectly with your source code, even inside complex `if`, `switch`, `for`, and **reactive `try/catch`** blocks.
 - **Go to Definition**: Navigate your signals and components with a single click.
 - **Throttled Diagnostics**: Real-time error reporting that respects your CPU, debounced for maximum responsiveness.
 
@@ -30,8 +30,9 @@ A custom TextMate grammar designed specifically for Round's hybrid format.
 Boost your productivity with built-in snippets for common Round patterns:
 - `round:component`: Scaffold a new component.
 - `round:signal`: Create a reactive signal.
+- `round:asyncSignal`: Create a signal for async data fetching.
 - `round:bindable`: Create a two-way binding.
-- `round:if` / `round:for`: Fast control-flow blocks.
+- `round:if` / `round:for` / `round:try`: Fast control-flow blocks.
 
 ---
 

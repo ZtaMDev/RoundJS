@@ -1,62 +1,29 @@
-import { createElement } from './dom.js';
+import { pushContext, popContext, contextStack, generateContextId, readContext, SuspenseContext, runInContext } from './context-shared.js';
+import { createElement, Fragment } from './dom.js';
 
-let nextContextId = 1;
-const contextStack = [];
-
-function pushContext(values) {
-    contextStack.push(values);
-}
-
-function popContext() {
-    contextStack.pop();
-}
+export { pushContext, popContext, contextStack, generateContextId, readContext, SuspenseContext, runInContext };
 
 /**
- * Read the current value of a context from the tree.
- * @template T
- * @param {Context<T>} ctx The context object.
- * @returns {T} The current context value.
+ * Internal logic to create a Provider component for a context.
  */
-export function readContext(ctx) {
-    for (let i = contextStack.length - 1; i >= 0; i--) {
-        const layer = contextStack[i];
-        if (layer && Object.prototype.hasOwnProperty.call(layer, ctx.id)) {
-            return layer[ctx.id];
-        }
-    }
-    return ctx.defaultValue;
-}
-
-/**
- * Create a new Context object for sharing state between components.
- * @template T
- * @param {T} [defaultValue] The value used when no provider is found.
- * @returns {Context<T>} The context object with a `Provider` component.
- */
-export function createContext(defaultValue) {
-    const ctx = {
-        id: nextContextId++,
-        defaultValue,
-        Provider: null
-    };
-
-    function Provider(props = {}) {
+function createProvider(ctx) {
+    const Provider = function Provider(props = {}) {
         const children = props.children;
+        const value = props.value;
 
         // Push context now so that any createElement/appendChild called 
         // during the instantiation of this Provider branch picks it up immediately.
-        pushContext({ [ctx.id]: props.value });
+        pushContext({ [ctx.id]: value });
         try {
             // We use a span to handle reactive value updates and dynamic children.
             return createElement('span', { style: { display: 'contents' } }, () => {
                 // Read current value (reactive if it's a signal)
-                const val = (typeof props.value === 'function' && props.value.peek) ? props.value() : props.value;
+                const val = (typeof value === 'function' && value.peek) ? value() : value;
 
-                // Push it during the effect run too! This ensures that anything returned 
-                // from this callback (which might trigger more appendChild calls) sees the context.
+                // Push it during the effect run too!
                 pushContext({ [ctx.id]: val });
                 try {
-                    return children;
+                    return typeof children === 'function' ? children() : children;
                 } finally {
                     popContext();
                 }
@@ -64,11 +31,25 @@ export function createContext(defaultValue) {
         } finally {
             popContext();
         }
-    }
+    };
+    return Provider;
+}
 
-    ctx.Provider = Provider;
+/**
+ * Create a new Context object for sharing state between components.
+ */
+export function createContext(defaultValue) {
+    const ctx = {
+        id: generateContextId(),
+        defaultValue,
+        Provider: null
+    };
+    ctx.Provider = createProvider(ctx);
     return ctx;
 }
+
+// Attach providers to built-in shared contexts
+SuspenseContext.Provider = createProvider(SuspenseContext);
 
 export function bindContext(ctx) {
     return () => {
@@ -86,16 +67,4 @@ export function bindContext(ctx) {
 
 export function captureContext() {
     return contextStack.slice();
-}
-
-export function runInContext(snapshot, fn) {
-    const prev = contextStack.slice();
-    contextStack.length = 0;
-    contextStack.push(...snapshot);
-    try {
-        return fn();
-    } finally {
-        contextStack.length = 0;
-        contextStack.push(...prev);
-    }
 }

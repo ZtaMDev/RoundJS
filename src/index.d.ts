@@ -405,25 +405,6 @@ export function readContext<T>(ctx: Context<T>): T;
  */
 export function bindContext<T>(ctx: Context<T>): () => T;
 
-/**
- * Error Handling
- */
-
-export interface ErrorBoundaryProps {
-    /** Content to render if an error occurs. Can be a signal or function. */
-    fallback?: any | ((props: { error: any }) => any);
-    /** Optional identifier for the boundary. */
-    name?: string;
-    /** Optional key that, when changed, resets the boundary error state. */
-    resetKey?: any;
-    /** Content that might throw an error. */
-    children?: any;
-}
-
-/**
- * Component that catches runtime errors in its child tree and displays a fallback UI.
- */
-export function ErrorBoundary(props: ErrorBoundaryProps): any;
 
 /**
  * Async & Code Splitting
