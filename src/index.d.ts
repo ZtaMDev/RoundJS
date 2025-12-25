@@ -6,7 +6,7 @@ export interface RoundSignal<T> {
     /**
      * Get or set the current value.
      */
-    (newValue?: T): T;
+    (newValue?: T | ((prev: T) => T)): T;
 
     /**
      * Get the current value (reactive).
@@ -380,6 +380,11 @@ export function createElement(tag: any, props?: any, ...children: any[]): any;
  * A grouping component that returns its children without a wrapper element.
  */
 export function Fragment(props: { children?: any }): any;
+
+/**
+ * A component for efficient keyed list reconciliation.
+ */
+export function ForKeyed<T>(props: { each: T[] | (() => T[]), key: (item: T) => any, children: (item: T) => any }): any;
 
 export interface Context<T> {
     /** Internal identifier for the context. */

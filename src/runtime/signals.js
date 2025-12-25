@@ -277,8 +277,9 @@ export function signal(initialValue) {
 
     const s = function (newValue) {
         if (arguments.length > 0) {
-            if (dep.value !== newValue) {
-                dep.value = newValue;
+            const next = typeof newValue === 'function' ? newValue(dep.value) : newValue;
+            if (dep.value !== next) {
+                dep.value = next;
                 dep.version = ++globalVersion;
                 notify(dep);
             }

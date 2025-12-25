@@ -407,12 +407,16 @@ Notes:
 ### `for (... in ...)`
 
 ```jsx
-{for(item in items){
-    <div className="row">{item}</div>
+{for(item in items()) key=item.id {
+    <div className="row">{item.name}</div>
 }}
 ```
 
-This compiles roughly to a `.map(...)` under the hood.
+This compiles to efficient **keyed reconciliation** using the `ForKeyed` runtime component. 
+
+#### Keyed vs Unkeyed
+- **Keyed (Recommended)**: By providing `key=expr`, Round maintains the identity of DOM nodes. If the list reorders, Round moves the existing nodes instead of recreating them. This preserves local state (like input focus, cursor position, or CSS animations).
+- **Unkeyed**: If no key is provided, Round simply maps over the list. Reordering the list will cause nodes to be reused based on their index, which might lead to state issues in complex lists.
 
 ### `switch`
 

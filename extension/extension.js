@@ -102,7 +102,7 @@ function activate(context) {
                 },
                 {
                     label: 'round:try',
-                    detail: 'Round JSX try/catch block',
+                    detail: 'Round JSX tr6y/catch block',
                     body: "{try {\n\t$0\n} catch(e) {\n\t\n}}",
                 },
                 {

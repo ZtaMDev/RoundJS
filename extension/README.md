@@ -23,7 +23,8 @@ Complete Language Server support for `.round` files, powered by a high-performan
 ### Hybrid Syntax Highlighting
 A custom TextMate grammar designed specifically for Round's hybrid format.
 - Context-aware highlighting for HTML tags and JSX expressions.
-- Support for Round's custom control-flow: `{if(...){...}}`, `{switch(...){...}}`, and `{for(... in ...){...}}`.
+- Support for Round's custom control-flow: `{if(...){...}}`, `{switch(...){...}}`, and `{for(... in ...) key={...} {...}}`.
+- Full highlighting for `key` attributes in `for` loops.
 - Special highlighting for the `bind:*` directive.
 
 ### Smart Snippets
@@ -45,6 +46,13 @@ Boost your productivity with built-in snippets for common Round patterns:
 ## Requirements
 
 The extension works best when your project contains a `package.json` with `round-core` installed, but it can also resolve types from a local `src/index.d.ts` if you are working on the framework itself.
+
+## Release Notes
+
+### 0.1.5
+- **Keyed `for` loop support**: Syntax highlighting and LSP support for `key={expr}` inside `for` blocks.
+- **Improved Hover**: Precision mapping for expressions inside loop parentheses.
+- **Type Sync**: Added `ForKeyed` to the internal type definitions for better completions.
 
 ## License
 

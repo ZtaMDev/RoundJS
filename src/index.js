@@ -5,6 +5,7 @@ export * from './runtime/router.js';
 export * from './runtime/suspense.js';
 export * from './runtime/context.js';
 export * from './runtime/store.js';
+export * from './runtime/keyed.js';
 
 import * as Signals from './runtime/signals.js';
 import * as DOM from './runtime/dom.js';

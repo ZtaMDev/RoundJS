@@ -306,6 +306,7 @@ connection.onHover((params) => {
         const tsxFsPath = normalizePath(URI.parse(params.textDocument.uri + '.tsx').fsPath);
         const originalOffset = vdoc.roundDoc.offsetAt(params.position);
         const offset = toGeneratedOffset(originalOffset, vdoc.edits || []);
+
         const info = ls.getQuickInfoAtPosition(tsxFsPath, offset);
         if (!info) return null;
         return {

@@ -458,8 +458,8 @@ export default function RoundPlugin(pluginOptions = {}) {
 
                 let transformedCode = transform(nextCode);
 
-                if (!/^\s*import\s+\{\s*createElement\s*,\s*Fragment\s*\}\s+from\s+['"][^'"]+['"];?/m.test(transformedCode)) {
-                    transformedCode = `import { createElement, Fragment } from '${runtimeImport}';\n` + transformedCode;
+                if (!/^\s*import\s+\{\s*createElement\s*,\s*Fragment\s*,\s*ForKeyed\s*\}\s+from\s+['"][^'"]+['"];?/m.test(transformedCode)) {
+                    transformedCode = `import { createElement, Fragment, ForKeyed } from '${runtimeImport}';\n` + transformedCode;
                 }
 
                 return {

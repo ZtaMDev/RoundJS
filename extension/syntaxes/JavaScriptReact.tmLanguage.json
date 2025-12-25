@@ -316,6 +316,9 @@
 							"include": "#paren-expression"
 						},
 						{
+							"include": "#round-for-key"
+						},
+						{
 							"include": "#decl-block"
 						}
 					]
@@ -393,6 +396,50 @@
 						},
 						{
 							"include": "#decl-block"
+						}
+					]
+				}
+			]
+		},
+		"round-for-key": {
+			"patterns": [
+				{
+					"match": "\\bkey(?=\\s*=)",
+					"name": "entity.other.attribute-name.js.jsx"
+				},
+				{
+					"begin": "(=)\\s*(\\{)",
+					"beginCaptures": {
+						"1": {
+							"name": "keyword.operator.assignment.js.jsx"
+						},
+						"2": {
+							"name": "punctuation.definition.block.js.jsx"
+						}
+					},
+					"end": "\\}",
+					"endCaptures": {
+						"0": {
+							"name": "punctuation.definition.block.js.jsx"
+						}
+					},
+					"patterns": [
+						{
+							"include": "#expression"
+						}
+					]
+				},
+				{
+					"begin": "(=)",
+					"beginCaptures": {
+						"1": {
+							"name": "keyword.operator.assignment.js.jsx"
+						}
+					},
+					"end": "(?=\\s|\\{)",
+					"patterns": [
+						{
+							"include": "#expression"
 						}
 					]
 				}

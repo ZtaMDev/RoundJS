@@ -6,9 +6,8 @@ function transformLSP(code, filename = 'file.round') {
     const editedRanges = [];
 
     const VIRTUAL_IMPORT = `// @ts-nocheck
-import { Fragment, createElement, NoErrorReport } from 'round-core';
+import { Fragment, createElement, ForKeyed } from 'round-core';
 const React = { createElement, Fragment };
-function NoErrorReport({ children }: { children?: any }) { return null; }
 
 declare global {
     namespace JSX {
@@ -47,7 +46,7 @@ declare global {
     }
 
     function applyOverlapOverwrite(start, end, content) {
-        if (start < 0 || end < start) return;
+        if (start < 0 || end < start || isNaN(start) || isNaN(end)) return;
         // Check for strict overlaps to avoid 'Cannot split a chunk'
         for (const range of editedRanges) {
             if (start < range.end && end > range.start) return;
@@ -111,7 +110,7 @@ declare global {
             i++;
         }
         if (depth !== 0) return null;
-        return { cond: str.substring(startIndex + 1, i - 1), end: i };
+        return { cond: str.substring(startIndex + 1, i - 1), start: startIndex, end: i };
     }
 
     // --- Context-aware JSX detection with prop tracking ---
@@ -328,24 +327,65 @@ declare global {
         const condResult = extractCondition(currentCode, i);
         if (!condResult) continue;
 
-        // Parse "item in list" from the condition
+        // Match "item in list" precisely to find offsets (using [^] for multiline)
         const forCond = condResult.cond;
-        const inMatch = forCond.match(/^\s*(\S+)\s+in\s+(.+)$/);
+        const inMatch = forCond.match(/^(\s*)(\S+)(\s+in\s+)([^]*)$/);
         if (!inMatch) continue;
 
-        const item = inMatch[1].trim();
-        const list = inMatch[2].trim();
+        const item = inMatch[2].trim();
+        const listStr = inMatch[4]; // Use raw for offsets to avoid drift
 
+        // --- KEY PARSING (Surgical) ---
+        let keyExpr = null;
+        let keyStart = -1, keyEnd = -1;
+        // Default: move i past the condition closing paren
         i = consumeWhitespace(currentCode, condResult.end);
-        if (currentCode[i] !== '{') continue;
 
+        if (currentCode.startsWith('key', i)) {
+            let kPtr = consumeWhitespace(currentCode, i + 3);
+            if (currentCode[kPtr] === '=') {
+                kPtr = consumeWhitespace(currentCode, kPtr + 1);
+                if (currentCode[kPtr] === '{') {
+                    const kb = parseBlock(currentCode, kPtr);
+                    if (kb) {
+                        keyExpr = currentCode.substring(kb.start + 1, kb.end);
+                        keyStart = kb.start + 1;
+                        keyEnd = kb.end;
+                        i = consumeWhitespace(currentCode, kb.end + 1);
+                    }
+                } else {
+                    let kStart = kPtr;
+                    while (kPtr < currentCode.length && !/\s/.test(currentCode[kPtr]) && currentCode[kPtr] !== '{') kPtr++;
+                    keyExpr = currentCode.substring(kStart, kPtr);
+                    keyStart = kStart;
+                    keyEnd = kPtr;
+                    i = consumeWhitespace(currentCode, kPtr);
+                }
+            }
+        }
+
+        if (currentCode[i] !== '{') continue;
         const block = parseBlock(currentCode, i);
         if (!block) continue;
 
-        applyOverlapOverwrite(start, i + 1, `{(() => ${list}.map(${item} => (<Fragment>`);
-        applyOverlapOverwrite(block.end, outer.end + 1, '</Fragment>)))}');
+        const listStartRel = inMatch[1].length + inMatch[2].length + inMatch[3].length;
+        const listStart = condResult.start + 1 + listStartRel;
+        const listEnd = listStart + listStr.length;
+
+        if (keyExpr && keyStart !== -1) {
+            applyOverlapOverwrite(start, listStart, `{createElement(ForKeyed, { each: () => `);
+            applyOverlapOverwrite(listEnd, keyStart, `, key: (${item}) => `);
+            applyOverlapOverwrite(keyEnd, i + 1, ` }, (${item}) => (<Fragment>`);
+            applyOverlapOverwrite(block.end, outer.end + 1, '</Fragment>)) }');
+        } else {
+            // Unkeyed or keyExpr extraction failed surgically
+            applyOverlapOverwrite(start, listStart, `{(() => `);
+            applyOverlapOverwrite(listEnd, i + 1, `.map((${item}) => (<Fragment>`);
+            applyOverlapOverwrite(block.end, outer.end + 1, '</Fragment>)))}');
+        }
         forExprRegex.lastIndex = start + 1;
     }
+
 
     // TRY/CATCH - with context check
     const tryExprRegex = /\{\s*try\s*[\(\{]/g;
@@ -400,16 +440,46 @@ declare global {
         const catchBlock = parseBlock(currentCode, j);
         if (!catchBlock) continue;
 
-        // Apply transformations
+        // SURGICAL GAP PRESERVATION:
+        // - 'try' keyword at tryKeywordStart (i - 3 after whitespace parse, but we need original pos)
+        // - 'catch' keyword at catchKeywordStart
+        // - catch parameter at catchParamStart/End
+
+        // Calculate key positions for surgical gaps
+        const tryKeywordStart = consumeWhitespace(currentCode, start + 1);
+        const catchKeywordStart = consumeWhitespace(currentCode, tryBlock.end + 1);
+
+        // Find catch param positions
+        let catchParamStart = -1, catchParamEnd = -1;
+        let tempJ = catchKeywordStart + 5; // after 'catch'
+        tempJ = consumeWhitespace(currentCode, tempJ);
+        if (currentCode[tempJ] === '(') {
+            catchParamStart = tempJ + 1;
+            const catchCondRes = extractCondition(currentCode, tempJ);
+            if (catchCondRes) {
+                catchParamEnd = catchCondRes.end - 1; // before ')'
+            }
+        }
+
+        // Apply transformations - simplified to avoid offset issues
+        // Preserve: 'try' keyword, tryBody, 'catch' keyword, catchParam, catchBody
         if (reactiveExpr) {
-            // Reactive try: {() => { try { expr; return (<Fragment>...</Fragment>); } catch(e) { return (<Fragment>...</Fragment>); } }}
-            applyOverlapOverwrite(start, i + 1, `{() => { try { ${reactiveExpr}; return (<Fragment>`);
-            applyOverlapOverwrite(tryBlock.end, j + 1, `</Fragment>); } catch(${catchParam}) { return (<Fragment>`);
+            // {try(expr) { body } catch(e) { catchBody }}
+            // -> {() => { try { expr; return (<Fragment>body</Fragment>); } catch(e) { return (<Fragment>catchBody</Fragment>); } }}
+            applyOverlapOverwrite(start, tryKeywordStart, '{() => { ');
+            applyOverlapOverwrite(tryKeywordStart + 3, tryBlock.start + 1, ` { ${reactiveExpr}; return (<Fragment>`);
+            applyOverlapOverwrite(tryBlock.end, catchKeywordStart, '</Fragment>); } ');
+            // Keep 'catch(e)' exactly as-is (GAP: catchKeywordStart to catchBlock.start)
+            applyOverlapOverwrite(catchBlock.start, catchBlock.start + 1, '{ return (<Fragment>');
             applyOverlapOverwrite(catchBlock.end, outer.end + 1, '</Fragment>); } }}');
         } else {
-            // Static try: {(() => { try { return (<Fragment>...</Fragment>); } catch(e) { return (<Fragment>...</Fragment>); } })()}
-            applyOverlapOverwrite(start, i + 1, '{(() => { try { return (<Fragment>');
-            applyOverlapOverwrite(tryBlock.end, j + 1, `</Fragment>); } catch(${catchParam}) { return (<Fragment>`);
+            // {try { body } catch(e) { catchBody }}
+            // -> {(() => { try { return (<Fragment>body</Fragment>); } catch(e) { return (<Fragment>catchBody</Fragment>); } })()}
+            applyOverlapOverwrite(start, tryKeywordStart, '{(() => { ');
+            applyOverlapOverwrite(tryKeywordStart + 3, tryBlock.start + 1, ' { return (<Fragment>');
+            applyOverlapOverwrite(tryBlock.end, catchKeywordStart, '</Fragment>); } ');
+            // Keep 'catch(e)' exactly as-is (GAP: catchKeywordStart to catchBlock.start)
+            applyOverlapOverwrite(catchBlock.start, catchBlock.start + 1, '{ return (<Fragment>');
             applyOverlapOverwrite(catchBlock.end, outer.end + 1, '</Fragment>); } })()}');
         }
         tryExprRegex.lastIndex = start + 1;

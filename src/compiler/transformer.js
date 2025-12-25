@@ -202,6 +202,29 @@ export function transform(code, initialDepth = 0) {
         const list = inMatch[2].trim();
 
         ptr = consumeWhitespace(code, condRes.end);
+
+        // --- KEY PARSING ---
+        let keyExpr = null;
+        if (code.startsWith('key', ptr)) {
+            let kPtr = consumeWhitespace(code, ptr + 3);
+            if (code[kPtr] === '=') {
+                kPtr = consumeWhitespace(code, kPtr + 1);
+                if (code[kPtr] === '{') {
+                    const keyBlock = parseBlock(code, kPtr);
+                    if (keyBlock) {
+                        keyExpr = code.substring(keyBlock.start + 1, keyBlock.end);
+                        ptr = consumeWhitespace(code, keyBlock.end + 1);
+                    }
+                } else {
+                    // Bare key: parse until whitespace or {
+                    let start = kPtr;
+                    while (kPtr < code.length && !/\s/.test(code[kPtr]) && code[kPtr] !== '{') kPtr++;
+                    keyExpr = code.substring(start, kPtr);
+                    ptr = consumeWhitespace(code, kPtr);
+                }
+            }
+        }
+
         if (code[ptr] !== '{') return null;
 
         const block = parseBlock(code, ptr);
@@ -217,7 +240,12 @@ export function transform(code, initialDepth = 0) {
             endIdx++;
         }
 
-        const replacement = `{(() => ${list}.map(${item} => (<Fragment>${transformedContent}</Fragment>)))}`;
+        let replacement;
+        if (keyExpr) {
+            replacement = `{createElement(ForKeyed, { each: () => ${list}, key: (${item}) => ${keyExpr} }, (${item}) => (<Fragment>${transformedContent}</Fragment>))}`;
+        } else {
+            replacement = `{(() => ${list}.map(${item} => (<Fragment>${transformedContent}</Fragment>)))}`;
+        }
         return { end: endIdx, replacement };
     }
 
