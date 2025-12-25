@@ -8,9 +8,10 @@
   <img src="https://img.shields.io/npm/v/round-core?color=brightgreen" alt="NPM Version" />
 </p>
 
-<p align="center">
-  <em>Round is a lightweight frontend framework focused on building <b>single-page applications (SPAs)</b> with <b>fine‑grained reactivity.</b></em>
-</p>
+<h3 align="center">
+  <em><b>Round</b> is a lightweight, DOM-first framework for building SPAs with fine-grained reactivity, no Virtual DOM, and fast, predictable updates powered by signals.</em>
+</h3>
+
 
 <div align="center">
  
