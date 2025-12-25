@@ -143,6 +143,15 @@ export default function Counter() {
 }
 ```
 
+### Signals Internals
+
+RoundJS utilizes a high-performance reactivity engine designed for efficiency and minimal memory overhead:
+
+- **Doubly-Linked List Dependency Tracking**: Instead of using heavy `Set` objects, RoundJS uses a linked-list of subscription nodes. This eliminates array spreads and object allocations during signal updates, providing constant-time performance for adding/removing dependencies.
+- **Global Versioning (Clock)**: Every signal write increments a global version counter. Computed signals (`derive`) track the version of their dependencies and only recompute if they are "dirty" (out of date). This ensures true lazyness and avoids redundant calculations.
+- **Automatic Batching**: Multiple signal updates within the same execution cycle are batched. Effects and DOM updates only trigger once at the end of the batch, preventing "glitches" and unnecessary re-renders.
+
+
 ### `derive(fn)`
 
 Create a computed signal that updates automatically when its dependencies change.
@@ -538,14 +547,6 @@ The CLI is intended for day-to-day development:
 - `round init <name>`
 
 Run `round -h` to see available commands.
-
-## Signals Internals
-
-RoundJS utilizes a high-performance reactivity engine designed for efficiency and minimal memory overhead:
-
-- **Doubly-Linked List Dependency Tracking**: Instead of using heavy `Set` objects, RoundJS uses a linked-list of subscription nodes. This eliminates array spreads and object allocations during signal updates, providing constant-time performance for adding/removing dependencies.
-- **Global Versioning (Clock)**: Every signal write increments a global version counter. Computed signals (`derive`) track the version of their dependencies and only recompute if they are "dirty" (out of date). This ensures true lazyness and avoids redundant calculations.
-- **Automatic Batching**: Multiple signal updates within the same execution cycle are batched. Effects and DOM updates only trigger once at the end of the batch, preventing "glitches" and unnecessary re-renders.
 
 ## Performance
 
