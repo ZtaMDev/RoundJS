@@ -73,9 +73,19 @@ A **signal** is a small reactive container.
 Round includes a CLI with a project initializer.
 
 ```bash
+# Install the CLI
+npm install round
+
+# Create a new app
 round init myapp
+
+# Navigate to the app directory
 cd myapp
+
+# Install dependencies
 npm install
+
+# Run the app
 npm run dev
 ```
 
