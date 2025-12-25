@@ -24,6 +24,7 @@ declare global {
             onChange?: (e: Event) => void;
             onKeyDown?: (e: KeyboardEvent) => void;
             onKeyUp?: (e: KeyboardEvent) => void;
+            onKeyPress?: (e: KeyboardEvent) => void;
             onBlur?: (e: FocusEvent) => void;
             onFocus?: (e: FocusEvent) => void;
             value?: any;
@@ -112,9 +113,13 @@ declare global {
         return { cond: str.substring(startIndex + 1, i - 1), end: i };
     }
 
-    // --- NEW: Context Safety Guard ---
-    function getJsxDepth(str, limitIndex) {
-        let depth = 0;
+    // --- Context-aware JSX detection with prop tracking ---
+    function getJsxContext(str, limitIndex) {
+        let jsxDepth = 0;
+        let inOpeningTag = false;
+        let attrBraceDepth = 0;
+        let prevWasEquals = false;
+
         let inSingle = false, inDouble = false, inTemplate = false;
         let inCommentLine = false, inCommentMulti = false;
 
@@ -133,16 +138,73 @@ declare global {
             if (ch === '\'') { inSingle = true; continue; }
             if (ch === '"') { inDouble = true; continue; }
 
-            if (ch === '<') {
-                const isTag = /[a-zA-Z0-9_$]/.test(next) || next === '>';
-                if (isTag) depth++;
-            } else if (ch === '<' && next === '/') {
-                if (depth > 0) depth--;
-            } else if (ch === '/' && next === '>') {
-                if (depth > 0) depth--;
+            // Track attribute expression braces
+            if (inOpeningTag) {
+                if (ch === '=' && !attrBraceDepth) {
+                    prevWasEquals = true;
+                    continue;
+                }
+                if (ch === '{') {
+                    if (prevWasEquals || attrBraceDepth > 0) {
+                        attrBraceDepth++;
+                    }
+                    prevWasEquals = false;
+                    continue;
+                }
+                if (ch === '}' && attrBraceDepth > 0) {
+                    attrBraceDepth--;
+                    continue;
+                }
+                if (!/\s/.test(ch)) {
+                    prevWasEquals = false;
+                }
+                // End of opening tag
+                if (ch === '>' && attrBraceDepth === 0) {
+                    inOpeningTag = false;
+                    continue;
+                }
+                // Self-closing tag
+                if (ch === '/' && next === '>' && attrBraceDepth === 0) {
+                    inOpeningTag = false;
+                    if (jsxDepth > 0) jsxDepth--;
+                    i++; // skip the >
+                    continue;
+                }
+            }
+
+            // JSX tag detection
+            if (ch === '<' && !inOpeningTag) {
+                const isOpenTag = /[a-zA-Z0-9_$]/.test(next);
+                const isCloseTag = next === '/';
+                const isFragment = next === '>';
+
+                if (isOpenTag) {
+                    jsxDepth++;
+                    inOpeningTag = true;
+                    attrBraceDepth = 0;
+                    prevWasEquals = false;
+                } else if (isCloseTag) {
+                    if (jsxDepth > 0) jsxDepth--;
+                } else if (isFragment) {
+                    jsxDepth++;
+                }
+            }
+
+            // Fragment closing </>
+            if (ch === '<' && next === '/' && str[i + 2] === '>') {
+                if (jsxDepth > 0) jsxDepth--;
+                i += 2;
+                continue;
             }
         }
-        return depth;
+
+        return {
+            jsxDepth,
+            inOpeningTag,
+            attrBraceDepth,
+            // ONLY transform when in JSX children context
+            shouldTransform: jsxDepth > 0 && !inOpeningTag && attrBraceDepth === 0
+        };
     }
 
     function parseIfChain(str, ifIndex) {
@@ -196,10 +258,11 @@ declare global {
     let currentCode = s.original;
     let match;
 
-    // IF
+    // IF - with context check
     const ifExprRegex = /\{\s*if\s*\(/g;
     while ((match = ifExprRegex.exec(currentCode)) !== null) {
-        if (getJsxDepth(currentCode, match.index) === 0) continue; // SAFETY GUARD
+        const ctx = getJsxContext(currentCode, match.index);
+        if (!ctx.shouldTransform) continue; // SAFETY GUARD
         const start = match.index;
         const outer = parseBlock(currentCode, start);
         if (!outer) continue;
@@ -209,10 +272,11 @@ declare global {
         ifExprRegex.lastIndex = start + 1;
     }
 
-    // SWITCH
+    // SWITCH - with context check
     const switchExprRegex = /\{\s*switch\s*\(/g;
     while ((match = switchExprRegex.exec(currentCode)) !== null) {
-        if (getJsxDepth(currentCode, match.index) === 0) continue; // SAFETY GUARD
+        const ctx = getJsxContext(currentCode, match.index);
+        if (!ctx.shouldTransform) continue; // SAFETY GUARD
         const start = match.index;
         const outer = parseBlock(currentCode, start);
         if (!outer) continue;
@@ -246,10 +310,11 @@ declare global {
         switchExprRegex.lastIndex = start + 1;
     }
 
-    // FOR
+    // FOR - with context check
     const forExprRegex = /\{\s*for\s*\(/g;
     while ((match = forExprRegex.exec(currentCode)) !== null) {
-        if (getJsxDepth(currentCode, match.index) === 0) continue; // SAFETY GUARD
+        const ctx = getJsxContext(currentCode, match.index);
+        if (!ctx.shouldTransform) continue; // SAFETY GUARD
         const start = match.index;
         const outer = parseBlock(currentCode, start);
         if (!outer) continue;
@@ -281,17 +346,19 @@ declare global {
         forExprRegex.lastIndex = start + 1;
     }
 
-    // SIGNALS
+    // SIGNALS - with context check
     const sigRegex = /\{\s*([A-Za-z_$][\w$]*)\s*\(\s*\)\s*\}/g;
     while ((match = sigRegex.exec(currentCode)) !== null) {
-        if (getJsxDepth(currentCode, match.index) === 0) continue; // SAFETY GUARD
+        const ctx = getJsxContext(currentCode, match.index);
+        if (!ctx.shouldTransform) continue; // SAFETY GUARD
         const bE = match[0].indexOf(match[1]);
         applyOverlapOverwrite(match.index, match.index + bE, '{() => ');
     }
     const sigAttrRegex = /=\{\s*([A-Za-z_$][\w$]*)\s*\(\s*\)\s*\}/g;
     while ((match = sigAttrRegex.exec(currentCode)) !== null) {
-        // Attributes are always in JSX tag (depth > 0). Guard is good practice but regex structure implies it (equals brace).
-        if (getJsxDepth(currentCode, match.index) === 0) continue; // SAFETY GUARD
+        // Attributes are always in JSX tag (depth > 0). Guard is good practice.
+        const ctx = getJsxContext(currentCode, match.index);
+        if (ctx.jsxDepth === 0) continue; // SAFETY GUARD
         const bE = match[0].indexOf(match[1]);
         applyOverlapOverwrite(match.index, match.index + bE, '={() => ');
     }

@@ -267,6 +267,11 @@ export function transform(code, initialDepth = 0) {
     let inSingle = false, inDouble = false, inTemplate = false;
     let inCommentLine = false, inCommentMulti = false;
 
+    // Track JSX opening tag state to avoid transforming code inside attribute expressions
+    let inOpeningTag = false;      // True when between <Tag and > (parsing attributes)
+    let attrBraceDepth = 0;        // Brace nesting depth inside ={...} expressions
+    let prevWasEquals = false;     // Track if previous non-whitespace char was '='
+
     while (i < code.length) {
         const ch = code[i];
         const next = i < code.length - 1 ? code[i + 1] : '';
@@ -304,19 +309,80 @@ export function transform(code, initialDepth = 0) {
         if (ch === '\'') { inSingle = true; result += ch; i++; continue; }
         if (ch === '"') { inDouble = true; result += ch; i++; continue; }
 
-        if (ch === '<') {
-            const isTag = /[a-zA-Z0-9_$]/.test(next) || next === '>';
-            if (isTag) jsxDepth++;
+        // Track attribute expression braces BEFORE other logic
+        if (inOpeningTag) {
+            if (ch === '=' && !attrBraceDepth) {
+                prevWasEquals = true;
+                result += ch;
+                i++;
+                continue;
+            }
+            if (ch === '{') {
+                if (prevWasEquals || attrBraceDepth > 0) {
+                    // Entering or continuing inside an attribute expression
+                    attrBraceDepth++;
+                }
+                prevWasEquals = false;
+                result += ch;
+                i++;
+                continue;
+            }
+            if (ch === '}' && attrBraceDepth > 0) {
+                attrBraceDepth--;
+                result += ch;
+                i++;
+                continue;
+            }
+            if (!/\s/.test(ch)) {
+                prevWasEquals = false;
+            }
+            // End of opening tag
+            if (ch === '>' && attrBraceDepth === 0) {
+                inOpeningTag = false;
+                result += ch;
+                i++;
+                continue;
+            }
+            // Self-closing tag
+            if (ch === '/' && next === '>' && attrBraceDepth === 0) {
+                inOpeningTag = false;
+                if (jsxDepth > 0) jsxDepth--;
+                result += '/>';
+                i += 2;
+                continue;
+            }
         }
 
-        if (ch === '<' && next === '/') {
-            if (jsxDepth > 0) jsxDepth--;
-        }
-        if (ch === '/' && next === '>') {
-            if (jsxDepth > 0) jsxDepth--;
+        // JSX tag detection (only when NOT inside an opening tag already)
+        if (ch === '<' && !inOpeningTag) {
+            const isOpenTag = /[a-zA-Z0-9_$]/.test(next);
+            const isCloseTag = next === '/';
+            const isFragment = next === '>';
+
+            if (isOpenTag) {
+                jsxDepth++;
+                inOpeningTag = true;
+                attrBraceDepth = 0;
+                prevWasEquals = false;
+            } else if (isCloseTag) {
+                // Closing tag </tag>
+                if (jsxDepth > 0) jsxDepth--;
+            } else if (isFragment) {
+                // Fragment <>
+                jsxDepth++;
+            }
         }
 
-        if (jsxDepth > 0) {
+        // Fragment closing </>
+        if (ch === '<' && next === '/' && code[i + 2] === '>') {
+            if (jsxDepth > 0) jsxDepth--;
+            result += '</>';
+            i += 3;
+            continue;
+        }
+
+        // ONLY transform when in JSX children context (not in opening tag, not in attr expression)
+        if (jsxDepth > 0 && !inOpeningTag && attrBraceDepth === 0) {
             let processed = false;
 
             // 1. Handlers for { control }
