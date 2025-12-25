@@ -22,9 +22,6 @@ jobs:
     - name: Install Root Dependencies
       run: bun install
 
-    - name: Build Round Core
-      run: bun run build:core
-
     - name: Install Benchmark Dependencies
       working-directory: ./benchmarks
       run: bun install
