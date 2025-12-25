@@ -243,6 +243,40 @@ export function Example() {
 }
 ```
 
+## DOM binding directives
+
+Round supports two-way bindings via props:
+
+- `bind:value={someBindable}` for text-like inputs, `<textarea>`, and `<select>`.
+- `bind:checked={someBindable}` for `<input type="checkbox">` and `<input type="radio">`.
+
+Round will warn if the value is not signal-like, and will warn if you bind a plain `signal()` instead of a `bindable()`.
+
+### `bindable.object(initialObject)` and deep binding
+
+Round supports object-shaped state with ergonomic deep bindings via proxies.
+
+```jsx
+import { bindable } from 'round-core';
+
+export function Profile() {
+    const user = bindable.object({
+        profile: { bio: '' },
+        flags: { newsletter: false }
+    });
+
+    return (
+        <div>
+            <textarea bind:value={user.profile.bio} />
+            <label>
+                <input type="checkbox" bind:checked={user.flags.newsletter} />
+                Subscribe
+            </label>
+        </div>
+    );
+}
+```
+
 ### `createStore(initialState, actions)`
 
 Create a shared global state store with actions and optional persistence.
@@ -287,26 +321,31 @@ const data = store.snapshot({ reactive: false }); // Get static JSON of state
 store.set('todos', []); // Direct set
 ```
 
-### `bindable.object(initialObject)` and deep binding
+### `.validate(validator, options)`
 
-Round supports object-shaped state with ergonomic deep bindings via proxies.
+Attach validation to a signal/bindable.
+
+- Invalid writes do not update the underlying value.
+- `signal.error` is itself a signal (reactive) containing the current error message or `null`.
+- `options.validateOn` can be `'input'` (default) or `'blur'`.
+- `options.validateInitial` can trigger validation on startup.
 
 ```jsx
 import { bindable } from 'round-core';
 
-export function Profile() {
-    const user = bindable.object({
-        profile: { bio: '' },
-        flags: { newsletter: false }
-    });
+export function EmailField() {
+    const email = bindable('')
+        .validate(
+            (v) => v.includes('@') || 'Invalid email',
+            { validateOn: 'blur' }
+        );
 
     return (
         <div>
-            <textarea bind:value={user.profile.bio} />
-            <label>
-                <input type="checkbox" bind:checked={user.flags.newsletter} />
-                Subscribe
-            </label>
+            <input bind:value={email} placeholder="name@example.com" />
+            <div style={() => ({ color: email.error() ? 'crimson' : '#666' })}>
+                {email.error}
+            </div>
         </div>
     );
 }
@@ -343,45 +382,6 @@ export function MyComponent() {
     return <div>Hello</div>;
 }
 ```
-
-### `.validate(validator, options)`
-
-Attach validation to a signal/bindable.
-
-- Invalid writes do not update the underlying value.
-- `signal.error` is itself a signal (reactive) containing the current error message or `null`.
-- `options.validateOn` can be `'input'` (default) or `'blur'`.
-- `options.validateInitial` can trigger validation on startup.
-
-```jsx
-import { bindable } from 'round-core';
-
-export function EmailField() {
-    const email = bindable('')
-        .validate(
-            (v) => v.includes('@') || 'Invalid email',
-            { validateOn: 'blur' }
-        );
-
-    return (
-        <div>
-            <input bind:value={email} placeholder="name@example.com" />
-            <div style={() => ({ color: email.error() ? 'crimson' : '#666' })}>
-                {email.error}
-            </div>
-        </div>
-    );
-}
-```
-
-## DOM binding directives
-
-Round supports two-way bindings via props:
-
-- `bind:value={someBindable}` for text-like inputs, `<textarea>`, and `<select>`.
-- `bind:checked={someBindable}` for `<input type="checkbox">` and `<input type="radio">`.
-
-Round will warn if the value is not signal-like, and will warn if you bind a plain `signal()` instead of a `bindable()`.
 
 ## JSX superset control flow
 
