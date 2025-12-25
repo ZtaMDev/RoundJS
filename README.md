@@ -419,7 +419,7 @@ This compiles to efficient **keyed reconciliation** using the `ForKeyed` runtime
 - **Keyed (Recommended)**: By providing `key=expr`, Round maintains the identity of DOM nodes. If the list reorders, Round moves the existing nodes instead of recreating them. This preserves local state (like input focus, cursor position, or CSS animations).
 - **Unkeyed**: If no key is provided, Round simply maps over the list. Reordering the list will cause nodes to be reused based on their index, which might lead to state issues in complex lists.
 
-### `switch(...) { case 'value': return <h1>Hello</h1> }`
+### `switch(...)`
 
 ```jsx
 {switch(status()){
