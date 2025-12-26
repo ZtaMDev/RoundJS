@@ -75,7 +75,7 @@ Round includes a CLI with a project initializer.
 
 ```bash
 # Install the CLI
-bun install round-core
+bun add round-core
 
 # Create a new app
 round init myapp
