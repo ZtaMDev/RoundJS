@@ -10,7 +10,7 @@ function activate(context) {
     context.subscriptions.push(outputChannel);
 
     // --- LSP Setup ---
-    const serverModule = context.asAbsolutePath(path.join('round-lsp', 'src', 'server.js'));
+    const serverModule = context.asAbsolutePath(path.join('dist', 'round-lsp', 'src', 'server.js'));
     const debugOptions = { execArgv: ['--nolazy', '--inspect=6009'] };
 
     const serverOptions = {

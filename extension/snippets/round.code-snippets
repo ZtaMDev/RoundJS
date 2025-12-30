@@ -54,15 +54,6 @@
     ],
     "description": "Insert a <Suspense> block"
   },
-  "Markdown": {
-    "prefix": "round:markdown",
-    "body": [
-      "import { Markdown } from 'round-core';",
-      "",
-      "<Markdown src=\"${1:./README.md}\" />$0"
-    ],
-    "description": "Insert a <Markdown> component"
-  },
   "Round if": {
     "prefix": "round:if",
     "body": [

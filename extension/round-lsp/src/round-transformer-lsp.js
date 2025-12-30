@@ -402,11 +402,11 @@ declare global {
         i = consumeWhitespace(currentCode, i);
 
         // Check for reactive try: try(expr) {...}
-        let reactiveExpr = null;
+        let reactiveExprReq = null;
         if (currentCode[i] === '(') {
             const condResult = extractCondition(currentCode, i);
             if (condResult) {
-                reactiveExpr = condResult.cond;
+                reactiveExprReq = condResult; // Keep the whole result to access offsets
                 i = consumeWhitespace(currentCode, condResult.end);
             }
         }
@@ -425,11 +425,14 @@ declare global {
         j = consumeWhitespace(currentCode, j);
 
         // Extract catch parameter
-        let catchParam = 'e';
+        let catchParam = 'e'; // Not really used for surgery but good for logic check
+        let catchParamStart = -1, catchParamEnd = -1;
         if (currentCode[j] === '(') {
             const catchCondResult = extractCondition(currentCode, j);
             if (catchCondResult) {
                 catchParam = catchCondResult.cond.trim() || 'e';
+                catchParamStart = catchCondResult.start;
+                catchParamEnd = catchCondResult.end;
                 j = consumeWhitespace(currentCode, catchCondResult.end);
             }
         }
@@ -440,45 +443,53 @@ declare global {
         const catchBlock = parseBlock(currentCode, j);
         if (!catchBlock) continue;
 
-        // SURGICAL GAP PRESERVATION:
-        // - 'try' keyword at tryKeywordStart (i - 3 after whitespace parse, but we need original pos)
-        // - 'catch' keyword at catchKeywordStart
-        // - catch parameter at catchParamStart/End
-
-        // Calculate key positions for surgical gaps
         const tryKeywordStart = consumeWhitespace(currentCode, start + 1);
         const catchKeywordStart = consumeWhitespace(currentCode, tryBlock.end + 1);
 
-        // Find catch param positions
-        let catchParamStart = -1, catchParamEnd = -1;
-        let tempJ = catchKeywordStart + 5; // after 'catch'
-        tempJ = consumeWhitespace(currentCode, tempJ);
-        if (currentCode[tempJ] === '(') {
-            catchParamStart = tempJ + 1;
-            const catchCondRes = extractCondition(currentCode, tempJ);
-            if (catchCondRes) {
-                catchParamEnd = catchCondRes.end - 1; // before ')'
-            }
-        }
-
-        // Apply transformations - simplified to avoid offset issues
-        // Preserve: 'try' keyword, tryBody, 'catch' keyword, catchParam, catchBody
-        if (reactiveExpr) {
+        // Apply transformations
+        if (reactiveExprReq) {
             // {try(expr) { body } catch(e) { catchBody }}
-            // -> {() => { try { expr; return (<Fragment>body</Fragment>); } catch(e) { return (<Fragment>catchBody</Fragment>); } }}
+            // Target:
+            // 1. '{try' -> '{(() => { try'
+            // 2. '(' of expr -> ' {'
+            // 3. ')' of expr -> ';'
+            // 4. '{' of tryBlock -> ' return (<Fragment>'
+            // 5. '}' of tryBlock -> '</Fragment>); }'
+            // 6. catch...
+
             applyOverlapOverwrite(start, tryKeywordStart, '{() => { ');
-            applyOverlapOverwrite(tryKeywordStart + 3, tryBlock.start + 1, ` { ${reactiveExpr}; return (<Fragment>`);
+
+            // Preserve 'expr' by transforming specific tokens around it
+            const condStart = reactiveExprReq.start; // index of '('
+            const condEnd = reactiveExprReq.end;     // index after ')'
+
+            // Replace 'try' + whitespace + '(' -> ' try {'
+            // Note: tryKeywordStart points to 't' of try.
+            // We want to keep 'try' literally if possible, or just overwrite safely.
+            // Let's overwrite 'try ... (' with 'try {' 
+            // BUT careful: if we overwrite 'try', we lose mapped 'try'. 
+            // Better: Keep 'try' (3 chars). Overwrite whitespace + '(' with ' {'
+
+            // tryKeywordStart + 3 is end of 'try'.
+            applyOverlapOverwrite(tryKeywordStart + 3, condStart + 1, ' { ');
+
+            // Overwrite ')' -> ';'
+            applyOverlapOverwrite(condEnd - 1, condEnd, ';');
+
+            // Overwrite whitespace + '{' -> ' return (<Fragment>'
+            applyOverlapOverwrite(condEnd, tryBlock.start + 1, ' return (<Fragment>');
+
             applyOverlapOverwrite(tryBlock.end, catchKeywordStart, '</Fragment>); } ');
-            // Keep 'catch(e)' exactly as-is (GAP: catchKeywordStart to catchBlock.start)
+
+            // Keep 'catch(e)' exactly as-is
             applyOverlapOverwrite(catchBlock.start, catchBlock.start + 1, '{ return (<Fragment>');
             applyOverlapOverwrite(catchBlock.end, outer.end + 1, '</Fragment>); } }}');
+
         } else {
-            // {try { body } catch(e) { catchBody }}
-            // -> {(() => { try { return (<Fragment>body</Fragment>); } catch(e) { return (<Fragment>catchBody</Fragment>); } })()}
+            // Static try
             applyOverlapOverwrite(start, tryKeywordStart, '{(() => { ');
             applyOverlapOverwrite(tryKeywordStart + 3, tryBlock.start + 1, ' { return (<Fragment>');
             applyOverlapOverwrite(tryBlock.end, catchKeywordStart, '</Fragment>); } ');
-            // Keep 'catch(e)' exactly as-is (GAP: catchKeywordStart to catchBlock.start)
             applyOverlapOverwrite(catchBlock.start, catchBlock.start + 1, '{ return (<Fragment>');
             applyOverlapOverwrite(catchBlock.end, outer.end + 1, '</Fragment>); } })()}');
         }
