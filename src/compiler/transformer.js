@@ -38,10 +38,12 @@ export function transform(code, initialDepth = 0) {
             }
             if (inSingle) {
                 if (ch === '\'' && prev !== '\\') inSingle = false;
+                else if (ch === '\n' || ch === '\r') inSingle = false; // Reset on newline (JS strings don't span lines)
                 continue;
             }
             if (inDouble) {
                 if (ch === '"' && prev !== '\\') inDouble = false;
+                else if (ch === '\n' || ch === '\r') inDouble = false; // Reset on newline
                 continue;
             }
 
@@ -91,18 +93,16 @@ export function transform(code, initialDepth = 0) {
         return { cond: str.substring(startIndex + 1, j - 1), end: j };
     }
 
-    // --- Control Flow Handlers ---
+    // --- Control Flow Helpers (Return { replacement, end, processed }) ---
+    // These now return the EXPRESSION string (without outer {}) and the end index.
+    // They accept 'startPtr' which is the index AFTER the opening '{' (or start of keyword if bare).
 
-    function handleIf(currI, isBare = false) {
-        // If bare, currI is at 'i' of 'if'. If not bare, currI is at '{'.
-        let startPtr = currI;
-        if (!isBare) {
-            startPtr = consumeWhitespace(code, currI + 1);
-        }
-
-        // Strict verification
+    function handleIfContent(startPtr) {
+        // Strict verification: code at startPtr should start with 'if'
         if (!code.startsWith('if', startPtr)) return null;
 
+        // Parse 'if' ... '('
+        // Fix: tolerate whitespace between if and (
         let ptr = startPtr + 2;
         ptr = consumeWhitespace(code, ptr);
         if (code[ptr] !== '(') return null;
@@ -158,14 +158,6 @@ export function transform(code, initialDepth = 0) {
             }
         }
 
-        // If not bare, consume closing '}'. If bare, we are done.
-        let endIdx = currentPtr;
-        if (!isBare) {
-            endIdx = consumeWhitespace(code, endIdx);
-            if (code[endIdx] !== '}') return null;
-            endIdx++;
-        }
-
         let expr = '';
         for (let idx = 0; idx < cases.length; idx++) {
             const c = cases[idx];
@@ -179,16 +171,12 @@ export function transform(code, initialDepth = 0) {
         }
         expr += elseContent ? `(<Fragment>${elseContent}</Fragment>)` : 'null';
 
-        // Always wrap in Thunk `{(() => ...)}`
-        return { end: endIdx, replacement: `{(() => ${expr})}` };
+        return { end: currentPtr, expression: expr };
     }
 
-    function handleFor(currI, isBare = false) {
-        let ptr = currI;
-        if (!isBare) ptr = consumeWhitespace(code, currI + 1);
-
-        if (!code.startsWith('for', ptr)) return null;
-        ptr += 3;
+    function handleForContent(startPtr) {
+        if (!code.startsWith('for', startPtr)) return null;
+        let ptr = startPtr + 3;
         ptr = consumeWhitespace(code, ptr);
 
         const condRes = extractCondition(code, ptr);
@@ -216,7 +204,6 @@ export function transform(code, initialDepth = 0) {
                         ptr = consumeWhitespace(code, keyBlock.end + 1);
                     }
                 } else {
-                    // Bare key: parse until whitespace or {
                     let start = kPtr;
                     while (kPtr < code.length && !/\s/.test(code[kPtr]) && code[kPtr] !== '{') kPtr++;
                     keyExpr = code.substring(start, kPtr);
@@ -226,35 +213,25 @@ export function transform(code, initialDepth = 0) {
         }
 
         if (code[ptr] !== '{') return null;
-
         const block = parseBlock(code, ptr);
         if (!block) return null;
 
         const rawContent = code.substring(block.start + 1, block.end);
         const transformedContent = transform(rawContent, 1);
+        const endIdx = block.end + 1;
 
-        let endIdx = block.end + 1;
-        if (!isBare) {
-            endIdx = consumeWhitespace(code, endIdx);
-            if (code[endIdx] !== '}') return null;
-            endIdx++;
-        }
-
-        let replacement;
+        let expression;
         if (keyExpr) {
-            replacement = `{createElement(ForKeyed, { each: () => ${list}, key: (${item}) => ${keyExpr} }, (${item}) => (<Fragment>${transformedContent}</Fragment>))}`;
+            expression = `createElement(ForKeyed, { each: () => ${list}, key: (${item}) => ${keyExpr} }, (${item}) => (<Fragment>${transformedContent}</Fragment>))`;
         } else {
-            replacement = `{(() => ${list}.map(${item} => (<Fragment>${transformedContent}</Fragment>)))}`;
+            expression = `(() => ${list}.map(${item} => (<Fragment>${transformedContent}</Fragment>)))`;
         }
-        return { end: endIdx, replacement };
+        return { end: endIdx, expression };
     }
 
-    function handleSwitch(currI, isBare = false) {
-        let ptr = currI;
-        if (!isBare) ptr = consumeWhitespace(code, currI + 1);
-
-        if (!code.startsWith('switch', ptr)) return null;
-        ptr += 6;
+    function handleSwitchContent(startPtr) {
+        if (!code.startsWith('switch', startPtr)) return null;
+        let ptr = startPtr + 6;
         ptr = consumeWhitespace(code, ptr);
 
         const condRes = extractCondition(code, ptr);
@@ -277,28 +254,16 @@ export function transform(code, initialDepth = 0) {
             return `${label} return (<Fragment>${body}</Fragment>);`;
         });
 
-        let endIdx = block.end + 1;
-        if (!isBare) {
-            endIdx = consumeWhitespace(code, endIdx);
-            if (code[endIdx] !== '}') return null;
-            endIdx++;
-        }
-
-        // Fix Reactivity: Return a function (Thunk) instead of IIFE result
-        // { function() { ... } }
-        const replacement = `{function() { __ROUND_SWITCH_TOKEN__(${cond}) { ${finalContent} } }}`;
-        return { end: endIdx, replacement };
+        // Use token to avoid nested switch overlap
+        const expression = `function() { __ROUND_SWITCH_TOKEN__(${cond}) { ${finalContent} } }`;
+        return { end: block.end + 1, expression };
     }
 
-    function handleTry(currI, isBare = false) {
-        let ptr = currI;
-        if (!isBare) ptr = consumeWhitespace(code, currI + 1);
-
-        if (!code.startsWith('try', ptr)) return null;
-        ptr += 3;
+    function handleTryContent(startPtr) {
+        if (!code.startsWith('try', startPtr)) return null;
+        let ptr = startPtr + 3;
         ptr = consumeWhitespace(code, ptr);
 
-        // Check for reactive try: try(expr) {...}
         let reactiveExpr = null;
         if (code[ptr] === '(') {
             const condRes = extractCondition(code, ptr);
@@ -308,9 +273,7 @@ export function transform(code, initialDepth = 0) {
             }
         }
 
-        // Must have opening brace for try block
         if (code[ptr] !== '{') return null;
-
         const tryBlock = parseBlock(code, ptr);
         if (!tryBlock) return null;
 
@@ -320,12 +283,10 @@ export function transform(code, initialDepth = 0) {
         ptr = tryBlock.end + 1;
         ptr = consumeWhitespace(code, ptr);
 
-        // Must have catch
         if (!code.startsWith('catch', ptr)) return null;
         ptr += 5;
         ptr = consumeWhitespace(code, ptr);
 
-        // Extract catch parameter (e) or (err)
         let catchParam = 'e';
         if (code[ptr] === '(') {
             const catchCondRes = extractCondition(code, ptr);
@@ -335,35 +296,91 @@ export function transform(code, initialDepth = 0) {
             }
         }
 
-        // Must have catch block
         if (code[ptr] !== '{') return null;
-
         const catchBlock = parseBlock(code, ptr);
         if (!catchBlock) return null;
 
         const catchContent = code.substring(catchBlock.start + 1, catchBlock.end);
         const transformedCatch = transform(catchContent, 1);
 
-        let endIdx = catchBlock.end + 1;
-
-        // If not bare, consume closing '}'
-        if (!isBare) {
-            endIdx = consumeWhitespace(code, endIdx);
-            if (code[endIdx] !== '}') return null;
-            endIdx++;
-        }
-
-        let replacement;
+        let expression;
         if (reactiveExpr) {
-            // Reactive try: return a THUNK (function) so dom.js handles it as a reactive child (effect)
-            replacement = `{() => { try { ${reactiveExpr}; return (<Fragment>${transformedTry}</Fragment>); } catch(${catchParam}) { return (<Fragment>${transformedCatch}</Fragment>); } }}`;
+            expression = `() => { try { ${reactiveExpr}; return (<Fragment>${transformedTry}</Fragment>); } catch(${catchParam}) { return (<Fragment>${transformedCatch}</Fragment>); } }`;
         } else {
-            // Static try: simple IIFE
-            replacement = `{(() => { try { return (<Fragment>${transformedTry}</Fragment>); } catch(${catchParam}) { return (<Fragment>${transformedCatch}</Fragment>); } })()}`;
+            expression = `(() => { try { return (<Fragment>${transformedTry}</Fragment>); } catch(${catchParam}) { return (<Fragment>${transformedCatch}</Fragment>); } })()`;
         }
+        return { end: catchBlock.end + 1, expression };
+    }
+
+    // --- Aggregator ---
+
+    function handleControlBlock(currI) {
+        // We are at '{'. Check if content starts with control flow.
+        let ptr = consumeWhitespace(code, currI + 1);
+
+        // Peek first keyword
+        let keyword = '';
+        if (code.startsWith('if', ptr)) keyword = 'if';
+        else if (code.startsWith('for', ptr)) keyword = 'for';
+        else if (code.startsWith('switch', ptr)) keyword = 'switch';
+        else if (code.startsWith('try', ptr)) keyword = 'try';
+
+        if (!keyword) return null;
+
+        // Start collecting expressions
+        const expressions = [];
+        let loopPtr = ptr;
+
+        while (true) {
+            // Find which handler to call
+            let res = null;
+            if (code.startsWith('if', loopPtr)) res = handleIfContent(loopPtr);
+            else if (code.startsWith('for', loopPtr)) res = handleForContent(loopPtr);
+            else if (code.startsWith('switch', loopPtr)) res = handleSwitchContent(loopPtr);
+            else if (code.startsWith('try', loopPtr)) res = handleTryContent(loopPtr);
+
+            if (!res) {
+                // If we hit something else, maybe invalid or normal JS.
+                // Must stop. Explicitly check if we are at '}'.
+                loopPtr = consumeWhitespace(code, loopPtr);
+                if (code[loopPtr] === '}') {
+                    // Clean loop end
+                    break;
+                } else {
+                    // Found garbage or non-transformable code. 
+                    // To be safe, we abort the whole sequence transform to avoid breaking mixed content?
+                    // Or we just break and hope for the best?
+                    // Previous logic returned null if strict check failed.
+                    return null;
+                }
+            }
+
+            expressions.push(res.expression);
+            loopPtr = consumeWhitespace(code, res.end);
+
+            if (code[loopPtr] === '}') {
+                break;
+            }
+            // Check if next is also control flow. If not, loop repeats, hits 'if(!res)' and returns null.
+        }
+
+        const finalExprs = expressions.map(e => {
+            if (e.startsWith('function') || e.startsWith('() =>') || e.startsWith('(() =>')) {
+                // It's a thunk. Call it.
+                return `{(${e})()}`;
+            }
+            return `{${e}}`;
+        });
+
+        const sequence = finalExprs.join(' ');
+        const replacement = `{(() => <Fragment>${sequence}</Fragment>)}`;
+
+        // consume the final '}'
+        let endIdx = loopPtr + 1;
 
         return { end: endIdx, replacement };
     }
+
 
     // --- Main Parser Loop ---
 
@@ -398,11 +415,13 @@ export function transform(code, initialDepth = 0) {
         if (inSingle) {
             result += ch;
             if (ch === '\'' && prev !== '\\') inSingle = false;
+            else if (ch === '\n' || ch === '\r') inSingle = false;
             i++; continue;
         }
         if (inDouble) {
             result += ch;
             if (ch === '"' && prev !== '\\') inDouble = false;
+            else if (ch === '\n' || ch === '\r') inDouble = false;
             i++; continue;
         }
 
@@ -421,10 +440,7 @@ export function transform(code, initialDepth = 0) {
                 continue;
             }
             if (ch === '{') {
-                if (prevWasEquals || attrBraceDepth > 0) {
-                    // Entering or continuing inside an attribute expression
-                    attrBraceDepth++;
-                }
+                if (prevWasEquals || attrBraceDepth > 0) attrBraceDepth++;
                 prevWasEquals = false;
                 result += ch;
                 i++;
@@ -436,9 +452,7 @@ export function transform(code, initialDepth = 0) {
                 i++;
                 continue;
             }
-            if (!/\s/.test(ch)) {
-                prevWasEquals = false;
-            }
+            if (!/\s/.test(ch)) prevWasEquals = false;
             // End of opening tag
             if (ch === '>' && attrBraceDepth === 0) {
                 inOpeningTag = false;
@@ -488,51 +502,63 @@ export function transform(code, initialDepth = 0) {
         if (jsxDepth > 0 && !inOpeningTag && attrBraceDepth === 0) {
             let processed = false;
 
-            // 1. Handlers for { control }
+            // 1. Handlers for { control } - BLOCK (Supported Nested Sequence)
             if (ch === '{') {
-                let ptr = consumeWhitespace(code, i + 1);
-                if (code.startsWith('if', ptr)) {
-                    const res = handleIf(i, false);
-                    if (res) { result += res.replacement; i = res.end; processed = true; }
-                } else if (code.startsWith('for', ptr)) {
-                    const res = handleFor(i, false);
-                    if (res) { result += res.replacement; i = res.end; processed = true; }
-                } else if (code.startsWith('switch', ptr)) {
-                    const res = handleSwitch(i, false);
-                    if (res) { result += res.replacement; i = res.end; processed = true; }
-                } else if (code.startsWith('try', ptr)) {
-                    const res = handleTry(i, false);
-                    if (res) { result += res.replacement; i = res.end; processed = true; }
+                const res = handleControlBlock(i);
+                if (res) {
+                    result += res.replacement;
+                    i = res.end;
+                    processed = true;
                 }
             }
 
             // 2. Handlers for bare control flow (implicit nesting)
-            // Strict check: must look like "if (" inside a code block
-            else if (ch === 'i' && code.startsWith('if', i)) {
-                // Verify it is followed by (
-                let ptr = consumeWhitespace(code, i + 2);
-                if (code[ptr] === '(') {
-                    const res = handleIf(i, true);
-                    if (res) { result += res.replacement; i = res.end; processed = true; }
-                }
-            } else if (ch === 'f' && code.startsWith('for', i)) {
-                let ptr = consumeWhitespace(code, i + 3);
-                if (code[ptr] === '(') {
-                    const res = handleFor(i, true);
-                    if (res) { result += res.replacement; i = res.end; processed = true; }
-                }
-            } else if (ch === 's' && code.startsWith('switch', i)) {
-                let ptr = consumeWhitespace(code, i + 6);
-                if (code[ptr] === '(') {
-                    const res = handleSwitch(i, true);
-                    if (res) { result += res.replacement; i = res.end; processed = true; }
-                }
-            } else if (ch === 't' && code.startsWith('try', i)) {
-                // Bare try: try { ... } catch { ... } or try(expr) { ... } catch { ... }
-                let ptr = consumeWhitespace(code, i + 3);
-                if (code[ptr] === '{' || code[ptr] === '(') {
-                    const res = handleTry(i, true);
-                    if (res) { result += res.replacement; i = res.end; processed = true; }
+            // Bare control flow is single statement, so we can wrap it individually.
+            if (!processed) {
+                if (ch === 'i' && code.startsWith('if', i)) {
+                    let ptr = consumeWhitespace(code, i + 2);
+                    if (code[ptr] === '(') {
+                        const res = handleIfContent(i); // Reuse content handler
+                        if (res) {
+                            result += `{(() => ${res.expression})}`;
+                            i = res.end;
+                            processed = true;
+                        }
+                    }
+                } else if (ch === 'f' && code.startsWith('for', i)) {
+                    let ptr = consumeWhitespace(code, i + 3);
+                    if (code[ptr] === '(') {
+                        const res = handleForContent(i);
+                        if (res) {
+                            result += `{${res.expression}}`;
+                            i = res.end;
+                            processed = true;
+                        }
+                    }
+                } else if (ch === 's' && code.startsWith('switch', i)) {
+                    let ptr = consumeWhitespace(code, i + 6);
+                    if (code[ptr] === '(') {
+                        const res = handleSwitchContent(i);
+                        if (res) {
+                            // handleSwitchContent returns `function() ...`
+                            // Need `{function() ...}`.
+                            result += `{${res.expression}}`;
+                            i = res.end;
+                            processed = true;
+                        }
+                    }
+                } else if (ch === 't' && code.startsWith('try', i)) {
+                    let ptr = consumeWhitespace(code, i + 3);
+                    if (code[ptr] === '{' || code[ptr] === '(') {
+                        const res = handleTryContent(i);
+                        if (res) {
+                            // handleTryContent returns `() => ...` or IIFE.
+                            // If IIFE `(() => ...)()`, wrap in `{...}`.
+                            result += `{${res.expression}}`;
+                            i = res.end;
+                            processed = true;
+                        }
+                    }
                 }
             }
 

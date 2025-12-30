@@ -538,10 +538,12 @@ bindable.object = function (initialObject = {}) {
 /**
  * Create a read-only computed signal.
  */
+// ...
 export function derive(fn) {
     const dep = {
         fn,
         value: undefined,
+        error: null, // Store error state
         version: -1,
         depsVersion: -1,
         subs: null,
@@ -551,11 +553,15 @@ export function derive(fn) {
             cleanup(this);
             const prev = context;
             context = this;
+            this.error = null; // Reset error
             try {
                 this.value = this.fn();
+            } catch (e) {
+                this.error = e; // Capture error
+                this.value = undefined;
+            } finally {
                 this.depsVersion = globalVersion;
                 this.version = ++globalVersion;
-            } finally {
                 context = prev;
             }
         }
@@ -570,6 +576,13 @@ export function derive(fn) {
     s.peek = () => {
         if (dep.version === -1 || dep.depsVersion < globalVersion) dep.run();
         return dep.value;
+    };
+
+    // Expose error as a signal-like getter
+    s.error = () => {
+        if (dep.version === -1 || dep.depsVersion < globalVersion) dep.run();
+        if (context) subscribe(context, dep);
+        return dep.error;
     };
 
     Object.defineProperty(s, 'value', { enumerable: true, configurable: true, get() { return s(); } });

@@ -39,7 +39,6 @@ declare global {
     }
 }
 `;
-    // Only prepend if not present
     if (!code.includes('import { Fragment')) {
         s.prepend(VIRTUAL_IMPORT);
         edits.push({ offset: 0, length: 0, newLength: VIRTUAL_IMPORT.length });
@@ -47,7 +46,6 @@ declare global {
 
     function applyOverlapOverwrite(start, end, content) {
         if (start < 0 || end < start || isNaN(start) || isNaN(end)) return;
-        // Check for strict overlaps to avoid 'Cannot split a chunk'
         for (const range of editedRanges) {
             if (start < range.end && end > range.start) return;
         }
@@ -59,31 +57,19 @@ declare global {
     }
 
     function parseBlock(str, startIndex) {
-        let open = 0;
-        let startBlockIndex = -1;
-        let endBlockIndex = -1;
+        let open = 0, startBlockIndex = -1;
         let inSingle = false, inDouble = false, inTemplate = false, inCommentLine = false, inCommentMulti = false;
-
         for (let i = startIndex; i < str.length; i++) {
             const ch = str[i], next = str[i + 1] || '', prev = str[i - 1] || '';
             if (inCommentLine) { if (ch === '\n' || ch === '\r') inCommentLine = false; continue; }
             if (inCommentMulti) { if (ch === '*' && next === '/') { inCommentMulti = false; i++; } continue; }
             if (inTemplate) { if (ch === '`' && prev !== '\\') inTemplate = false; continue; }
-            if (inSingle) { if (ch === '\'' && prev !== '\\') inSingle = false; continue; }
-            if (inDouble) { if (ch === '"' && prev !== '\\') inDouble = false; continue; }
+            if (inSingle) { if (ch === '\'' && prev !== '\\') inSingle = false; else if (ch === '\n' || ch === '\r') inSingle = false; continue; }
+            if (inDouble) { if (ch === '"' && prev !== '\\') inDouble = false; else if (ch === '\n' || ch === '\r') inDouble = false; continue; }
             if (ch === '/' && next === '/') { inCommentLine = true; i++; continue; }
             if (ch === '/' && next === '*') { inCommentMulti = true; i++; continue; }
-            if (ch === '`') { inTemplate = true; continue; }
-            if (ch === '\'') { inSingle = true; continue; }
-            if (ch === '"') { inDouble = true; continue; }
-
-            if (ch === '{') {
-                if (open === 0) startBlockIndex = i;
-                open++;
-            } else if (ch === '}') {
-                open--;
-                if (open === 0) { endBlockIndex = i; return { start: startBlockIndex, end: endBlockIndex }; }
-            }
+            if (ch === '{') { if (open === 0) startBlockIndex = i; open++; }
+            else if (ch === '}') { open--; if (open === 0) return { start: startBlockIndex, end: i }; }
         }
         return null;
     }
@@ -95,420 +81,339 @@ declare global {
 
     function extractCondition(str, startIndex) {
         if (str[startIndex] !== '(') return null;
-        let depth = 1;
-        let i = startIndex + 1;
+        let depth = 1, i = startIndex + 1;
         let inSingle = false, inDouble = false, inTemplate = false;
         while (i < str.length && depth > 0) {
             const ch = str[i], prev = str[i - 1] || '';
             if (!inDouble && !inTemplate && ch === '\'' && prev !== '\\') inSingle = !inSingle;
             else if (!inSingle && !inTemplate && ch === '"' && prev !== '\\') inDouble = !inDouble;
             else if (!inSingle && !inDouble && ch === '`' && prev !== '\\') inTemplate = !inTemplate;
-            if (!inSingle && !inDouble && !inTemplate) {
-                if (ch === '(') depth++;
-                else if (ch === ')') depth--;
-            }
+            if (!inSingle && !inDouble && !inTemplate) { if (ch === '(') depth++; else if (ch === ')') depth--; }
             i++;
         }
         if (depth !== 0) return null;
         return { cond: str.substring(startIndex + 1, i - 1), start: startIndex, end: i };
     }
 
-    // --- Context-aware JSX detection with prop tracking ---
-    function getJsxContext(str, limitIndex) {
-        let jsxDepth = 0;
-        let inOpeningTag = false;
-        let attrBraceDepth = 0;
-        let prevWasEquals = false;
+    function isInsideJsSemantics(str, blockStart) {
+        let ptr = blockStart - 1;
+        while (ptr >= 0 && /\s/.test(str[ptr])) ptr--;
+        if (ptr < 0) return false;
+        if (str[ptr] === '>' && str[ptr - 1] === '=') return true;
+        if (str[ptr] === ')') {
+            let depth = 1; ptr--;
+            while (ptr >= 0 && depth > 0) { if (str[ptr] === ')') depth++; else if (str[ptr] === '(') depth--; ptr--; }
+            while (ptr >= 0 && /\s/.test(str[ptr])) ptr--;
+        }
+        const wordEnd = ptr + 1; let wordStart = ptr;
+        while (wordStart >= 0 && /[a-zA-Z0-9_$]/.test(str[wordStart])) wordStart--;
+        const word = str.substring(wordStart + 1, wordEnd);
+        if (['return', 'function', 'class', 'else'].includes(word)) return true;
+        if (str[ptr] === ':') return true;
+        return false;
+    }
 
-        let inSingle = false, inDouble = false, inTemplate = false;
-        let inCommentLine = false, inCommentMulti = false;
+    // --- RECURSIVE BLOCK CONTENT WALKER ---
+    // Walks inside a block (between { and }) and transforms nested control flow
+    function walkBlockContent(blockStart, blockEnd) {
+        let jsxDepth = 1; // We are inside JSX since parent called us
+        let inOpeningTag = false, attrBraceDepth = 0, prevWasEquals = false;
+        let inSingle = false, inDouble = false, inTemplate = false, inCommentLine = false, inCommentMulti = false;
 
-        for (let i = 0; i < limitIndex; i++) {
-            const ch = str[i], next = str[i + 1] || '', prev = str[i - 1] || '';
+        for (let i = blockStart + 1; i < blockEnd; i++) {
+            const ch = code[i], next = code[i + 1] || '', prev = code[i - 1] || '';
 
             if (inCommentLine) { if (ch === '\n' || ch === '\r') inCommentLine = false; continue; }
             if (inCommentMulti) { if (ch === '*' && next === '/') { inCommentMulti = false; i++; } continue; }
             if (inTemplate) { if (ch === '`' && prev !== '\\') inTemplate = false; continue; }
-            if (inSingle) { if (ch === '\'' && prev !== '\\') inSingle = false; continue; }
-            if (inDouble) { if (ch === '"' && prev !== '\\') inDouble = false; continue; }
-
+            if (inSingle) { if (ch === '\'' && prev !== '\\') inSingle = false; else if (ch === '\n' || ch === '\r') inSingle = false; continue; }
+            if (inDouble) { if (ch === '"' && prev !== '\\') inDouble = false; else if (ch === '\n' || ch === '\r') inDouble = false; continue; }
             if (ch === '/' && next === '/') { inCommentLine = true; i++; continue; }
             if (ch === '/' && next === '*') { inCommentMulti = true; i++; continue; }
-            if (ch === '`') { inTemplate = true; continue; }
-            if (ch === '\'') { inSingle = true; continue; }
-            if (ch === '"') { inDouble = true; continue; }
 
-            // Track attribute expression braces
             if (inOpeningTag) {
-                if (ch === '=' && !attrBraceDepth) {
-                    prevWasEquals = true;
-                    continue;
-                }
-                if (ch === '{') {
-                    if (prevWasEquals || attrBraceDepth > 0) {
-                        attrBraceDepth++;
-                    }
-                    prevWasEquals = false;
-                    continue;
-                }
-                if (ch === '}' && attrBraceDepth > 0) {
-                    attrBraceDepth--;
-                    continue;
-                }
-                if (!/\s/.test(ch)) {
-                    prevWasEquals = false;
-                }
-                // End of opening tag
-                if (ch === '>' && attrBraceDepth === 0) {
-                    inOpeningTag = false;
-                    continue;
-                }
-                // Self-closing tag
-                if (ch === '/' && next === '>' && attrBraceDepth === 0) {
-                    inOpeningTag = false;
-                    if (jsxDepth > 0) jsxDepth--;
-                    i++; // skip the >
-                    continue;
-                }
+                if (ch === '=' && !attrBraceDepth) { prevWasEquals = true; continue; }
+                if (ch === '{') { if (prevWasEquals || attrBraceDepth > 0) attrBraceDepth++; prevWasEquals = false; continue; }
+                if (ch === '}' && attrBraceDepth > 0) { attrBraceDepth--; continue; }
+                if (!/\s/.test(ch)) prevWasEquals = false;
+                if (ch === '>' && attrBraceDepth === 0) { inOpeningTag = false; continue; }
+                if (ch === '/' && next === '>' && attrBraceDepth === 0) { inOpeningTag = false; if (jsxDepth > 0) jsxDepth--; i++; continue; }
             }
-
-            // JSX tag detection
             if (ch === '<' && !inOpeningTag) {
-                const isOpenTag = /[a-zA-Z0-9_$]/.test(next);
-                const isCloseTag = next === '/';
-                const isFragment = next === '>';
+                const isOpenTag = /[a-zA-Z0-9_$]/.test(next), isCloseTag = next === '/', isFragment = next === '>';
+                if (isOpenTag || isFragment) { jsxDepth++; if (isOpenTag) { inOpeningTag = true; attrBraceDepth = 0; prevWasEquals = false; } }
+                else if (isCloseTag) { if (jsxDepth > 0) jsxDepth--; }
+            }
+            if (ch === '<' && next === '/' && code[i + 2] === '>') { if (jsxDepth > 0) jsxDepth--; i += 2; continue; }
 
-                if (isOpenTag) {
-                    jsxDepth++;
-                    inOpeningTag = true;
-                    attrBraceDepth = 0;
-                    prevWasEquals = false;
-                } else if (isCloseTag) {
-                    if (jsxDepth > 0) jsxDepth--;
-                } else if (isFragment) {
-                    jsxDepth++;
+            // If we are in JSX children and find a `{`
+            if (jsxDepth > 0 && !inOpeningTag && attrBraceDepth === 0 && ch === '{') {
+                const ptr = consumeWhitespace(code, i + 1);
+                let isControl = false;
+                if (code.startsWith('if', ptr)) isControl = true;
+                else if (code.startsWith('for', ptr)) isControl = true;
+                else if (code.startsWith('switch', ptr)) isControl = true;
+                else if (code.startsWith('try', ptr)) isControl = true;
+
+                if (isControl && !isInsideJsSemantics(code, i)) {
+                    const block = parseBlock(code, i);
+                    if (block) {
+                        handleControlBlock(i, block.end);
+                        i = block.end;
+                    }
                 }
             }
+        }
+    }
 
-            // Fragment closing </>
-            if (ch === '<' && next === '/' && str[i + 2] === '>') {
-                if (jsxDepth > 0) jsxDepth--;
-                i += 2;
+    // --- MAIN WALKER ---
+    let jsxDepth = 0, inOpeningTag = false, attrBraceDepth = 0, prevWasEquals = false;
+    let inSingle = false, inDouble = false, inTemplate = false, inCommentLine = false, inCommentMulti = false;
+
+    for (let i = 0; i < code.length; i++) {
+        const ch = code[i], next = code[i + 1] || '', prev = code[i - 1] || '';
+
+        if (inCommentLine) { if (ch === '\n' || ch === '\r') inCommentLine = false; continue; }
+        if (inCommentMulti) { if (ch === '*' && next === '/') { inCommentMulti = false; i++; } continue; }
+        if (inTemplate) { if (ch === '`' && prev !== '\\') inTemplate = false; continue; }
+        if (inSingle) { if (ch === '\'' && prev !== '\\') inSingle = false; else if (ch === '\n' || ch === '\r') inSingle = false; continue; }
+        if (inDouble) { if (ch === '"' && prev !== '\\') inDouble = false; else if (ch === '\n' || ch === '\r') inDouble = false; continue; }
+        if (ch === '/' && next === '/') { inCommentLine = true; i++; continue; }
+        if (ch === '/' && next === '*') { inCommentMulti = true; i++; continue; }
+
+        if (inOpeningTag) {
+            if (ch === '=' && !attrBraceDepth) { prevWasEquals = true; continue; }
+            if (ch === '{') { if (prevWasEquals || attrBraceDepth > 0) attrBraceDepth++; prevWasEquals = false; continue; }
+            if (ch === '}' && attrBraceDepth > 0) { attrBraceDepth--; continue; }
+            if (!/\s/.test(ch)) prevWasEquals = false;
+            if (ch === '>' && attrBraceDepth === 0) { inOpeningTag = false; continue; }
+            if (ch === '/' && next === '>' && attrBraceDepth === 0) { inOpeningTag = false; if (jsxDepth > 0) jsxDepth--; i++; continue; }
+        }
+        if (ch === '<' && !inOpeningTag) {
+            const isOpenTag = /[a-zA-Z0-9_$]/.test(next), isCloseTag = next === '/', isFragment = next === '>';
+            if (isOpenTag || isFragment) { jsxDepth++; if (isOpenTag) { inOpeningTag = true; attrBraceDepth = 0; prevWasEquals = false; } }
+            else if (isCloseTag) { if (jsxDepth > 0) jsxDepth--; }
+        }
+        if (ch === '<' && next === '/' && code[i + 2] === '>') { if (jsxDepth > 0) jsxDepth--; i += 2; continue; }
+
+        if (jsxDepth > 0 && !inOpeningTag && attrBraceDepth === 0 && ch === '{') {
+            const ptr = consumeWhitespace(code, i + 1);
+            let isControl = false;
+            if (code.startsWith('if', ptr)) isControl = true;
+            else if (code.startsWith('for', ptr)) isControl = true;
+            else if (code.startsWith('switch', ptr)) isControl = true;
+            else if (code.startsWith('try', ptr)) isControl = true;
+
+            if (isControl && !isInsideJsSemantics(code, i)) {
+                const block = parseBlock(code, i);
+                if (block) {
+                    handleControlBlock(i, block.end);
+                    i = block.end;
+                }
+            }
+        }
+    }
+
+    function handleControlBlock(start, end) {
+        applyOverlapOverwrite(start, start + 1, '{(() => <Fragment>');
+
+        let ptr = consumeWhitespace(code, start + 1);
+
+        while (ptr < end) {
+            let nextPtr = -1;
+
+            if (code.startsWith('if', ptr)) {
+                nextPtr = handleIf(ptr);
+            } else if (code.startsWith('for', ptr)) {
+                nextPtr = handleFor(ptr);
+            } else if (code.startsWith('switch', ptr)) {
+                nextPtr = handleSwitch(ptr);
+            } else if (code.startsWith('try', ptr)) {
+                nextPtr = handleTry(ptr);
+            } else {
+                if (code[ptr] === '}') break;
+                ptr++;
                 continue;
             }
+
+            if (nextPtr !== -1) {
+                ptr = consumeWhitespace(code, nextPtr);
+            } else {
+                ptr++;
+            }
         }
 
-        return {
-            jsxDepth,
-            inOpeningTag,
-            attrBraceDepth,
-            // ONLY transform when in JSX children context
-            shouldTransform: jsxDepth > 0 && !inOpeningTag && attrBraceDepth === 0
-        };
+        applyOverlapOverwrite(end, end + 1, '</Fragment>)}');
     }
 
-    function parseIfChain(str, ifIndex) {
-        let i = ifIndex;
-        let isFirst = true;
+    function handleIf(startPtr) {
+        let currentPtr = startPtr;
+        let first = true;
+
         while (true) {
-            if (!str.slice(i).startsWith('if')) break;
-            i += 2;
-            i = consumeWhitespace(str, i);
+            let ifStart = currentPtr;
+            if (!first) {
+                if (!code.startsWith('if', currentPtr)) break;
+                currentPtr += 2;
+            } else {
+                currentPtr += 2; first = false;
+            }
+            currentPtr = consumeWhitespace(code, currentPtr);
+            const condRes = extractCondition(code, currentPtr);
+            if (!condRes) return -1;
 
-            const condResult = extractCondition(str, i);
-            if (!condResult) break;
+            // First if: replace "if (" with "{(" to wrap the whole chain
+            // Subsequent else if: replace "if (" with just "("
+            const prefix = (ifStart === startPtr) ? '{(' : '(';
+            applyOverlapOverwrite(ifStart, condRes.start + 1, prefix);
+            applyOverlapOverwrite(condRes.end - 1, consumeWhitespace(code, condRes.end) + 1, ') ? (<Fragment>');
 
-            const condStart = i;
-            const condEnd = condResult.end;
-            i = consumeWhitespace(str, condEnd);
-            if (str[i] !== '{') break;
+            const ptrAfterCond = consumeWhitespace(code, condRes.end);
+            const block = parseBlock(code, ptrAfterCond);
+            if (!block) return -1;
 
-            applyOverlapOverwrite(condStart - 2, condStart + 1, '(');
-            applyOverlapOverwrite(condEnd - 1, i + 1, ') ? (<Fragment>');
+            // RECURSIVE: Walk inside the block content for nested control flow
+            walkBlockContent(block.start, block.end);
 
-            const block = parseBlock(str, i);
-            if (!block) break;
+            currentPtr = consumeWhitespace(code, block.end + 1);
 
-            const endOfBlock = block.end;
-            i = consumeWhitespace(str, endOfBlock + 1);
-
-            if (str.startsWith('else', i)) {
-                const nextI = consumeWhitespace(str, i + 4);
-                if (str.startsWith('if', nextI)) {
-                    applyOverlapOverwrite(endOfBlock, nextI, '</Fragment>) : ');
-                    isFirst = false;
-                    i = nextI;
+            if (code.startsWith('else', currentPtr)) {
+                let nextI = consumeWhitespace(code, currentPtr + 4);
+                if (code.startsWith('if', nextI)) {
+                    applyOverlapOverwrite(block.end, nextI, '</Fragment>) : ');
+                    currentPtr = nextI;
                     continue;
                 }
-                if (str[nextI] === '{') {
-                    const elseBlock = parseBlock(str, nextI);
+                if (code[nextI] === '{') {
+                    applyOverlapOverwrite(block.end, nextI + 1, '</Fragment>) : (<Fragment>');
+                    const elseBlock = parseBlock(code, nextI);
                     if (elseBlock) {
-                        applyOverlapOverwrite(endOfBlock, nextI + 1, '</Fragment>) : (<Fragment>');
-                        applyOverlapOverwrite(elseBlock.end, elseBlock.end + 1, '</Fragment>)');
-                        return { hasElse: true };
+                        // RECURSIVE: Walk inside else block too
+                        walkBlockContent(elseBlock.start, elseBlock.end);
+                        applyOverlapOverwrite(elseBlock.end, elseBlock.end + 1, '</Fragment>) }');
+                        return elseBlock.end + 1;
                     }
                 }
             }
-            applyOverlapOverwrite(endOfBlock, endOfBlock + 1, '</Fragment>) : null');
-            break;
+
+            applyOverlapOverwrite(block.end, block.end + 1, '</Fragment>) : null }');
+            return block.end + 1;
         }
-        return { hasElse: false };
+        return -1;
     }
 
-    let currentCode = s.original;
-    let match;
+    function handleFor(startPtr) {
+        let ptr = consumeWhitespace(code, startPtr + 3);
+        const condRes = extractCondition(code, ptr);
+        if (!condRes) return -1;
+        const forCond = condRes.cond;
+        const inMatch = forCond.match(/^\s*(\S+)\s+in\s+([^]*)$/);
+        if (!inMatch) return -1;
+        const item = inMatch[1].trim(), listStr = inMatch[2];
+        ptr = consumeWhitespace(code, condRes.end);
 
-    // IF - with context check
-    const ifExprRegex = /\{\s*if\s*\(/g;
-    while ((match = ifExprRegex.exec(currentCode)) !== null) {
-        const ctx = getJsxContext(currentCode, match.index);
-        if (!ctx.shouldTransform) continue; // SAFETY GUARD
-        const start = match.index;
-        const outer = parseBlock(currentCode, start);
-        if (!outer) continue;
-        applyOverlapOverwrite(start, start + 1, '{(() => ');
-        parseIfChain(currentCode, consumeWhitespace(currentCode, start + 1));
-        applyOverlapOverwrite(outer.end, outer.end + 1, ')}');
-        ifExprRegex.lastIndex = start + 1;
+        let keyExpr = null;
+        if (code.startsWith('key', ptr)) {
+            let kPtr = consumeWhitespace(code, ptr + 3);
+            if (code[kPtr] === '=') {
+                kPtr = consumeWhitespace(code, kPtr + 1);
+                if (code[kPtr] === '{') {
+                    const kb = parseBlock(code, kPtr);
+                    if (kb) { keyExpr = code.substring(kb.start + 1, kb.end); ptr = consumeWhitespace(code, kb.end + 1); }
+                } else {
+                    let ks = kPtr;
+                    while (kPtr < code.length && !/\s/.test(code[kPtr]) && code[kPtr] !== '{') kPtr++;
+                    keyExpr = code.substring(ks, kPtr); ptr = consumeWhitespace(code, kPtr);
+                }
+            }
+        }
+
+        if (code[ptr] !== '{') return -1;
+        const block = parseBlock(code, ptr);
+        if (!block) return -1;
+
+        // RECURSIVE: Walk inside for block
+        walkBlockContent(block.start, block.end);
+
+        if (keyExpr) {
+            applyOverlapOverwrite(startPtr, block.start + 1, `{createElement(ForKeyed, { each: () => ${listStr}, key: (${item}) => ${keyExpr} }, (${item}) => (<Fragment>`);
+            applyOverlapOverwrite(block.end, block.end + 1, '</Fragment>)) }');
+        } else {
+            applyOverlapOverwrite(startPtr, block.start + 1, `{(() => ${listStr}.map((${item}) => (<Fragment>`);
+            applyOverlapOverwrite(block.end, block.end + 1, '</Fragment>)))() }');
+        }
+        return block.end + 1;
     }
 
-    // SWITCH - with context check
-    const switchExprRegex = /\{\s*switch\s*\(/g;
-    while ((match = switchExprRegex.exec(currentCode)) !== null) {
-        const ctx = getJsxContext(currentCode, match.index);
-        if (!ctx.shouldTransform) continue; // SAFETY GUARD
-        const start = match.index;
-        const outer = parseBlock(currentCode, start);
-        if (!outer) continue;
+    function handleSwitch(startPtr) {
+        let ptr = consumeWhitespace(code, startPtr + 6);
+        const condRes = extractCondition(code, ptr);
+        if (!condRes) return -1;
+        const block = parseBlock(code, consumeWhitespace(code, condRes.end));
+        if (!block) return -1;
 
-        let i = consumeWhitespace(currentCode, start + 1);
-        if (!currentCode.slice(i).startsWith('switch')) continue;
-        i += 6;
-        i = consumeWhitespace(currentCode, i);
+        // RECURSIVE: Walk inside switch block
+        walkBlockContent(block.start, block.end);
 
-        const condResult = extractCondition(currentCode, i);
-        if (!condResult) continue;
-
-        i = consumeWhitespace(currentCode, condResult.end);
-        if (currentCode[i] !== '{') continue;
-
-        const block = parseBlock(currentCode, i);
-        if (!block) continue;
-
-        applyOverlapOverwrite(start, start + 1, '{(() => { ');
-        const content = currentCode.substring(block.start + 1, block.end);
+        applyOverlapOverwrite(startPtr, block.start + 1, `{function() { switch(${condRes.cond}) {`);
+        const content = code.substring(block.start + 1, block.end);
         const labelRegex = /(case\s+.*?:|default:)/g;
         let lMatch, lastEnd = -1;
         while ((lMatch = labelRegex.exec(content)) !== null) {
-            const lS = block.start + 1 + lMatch.index;
-            const lE = lS + lMatch[0].length;
-            applyOverlapOverwrite(lS, lE, (lastEnd !== -1 ? '</Fragment>); ' : '') + lMatch[0] + ' return (<Fragment>');
+            const lS = block.start + 1 + lMatch.index, lE = lS + lMatch[0].length;
+            if (lastEnd !== -1) applyOverlapOverwrite(lS, lS, '</Fragment>); ');
+            applyOverlapOverwrite(lE, lE, ' return (<Fragment>');
             lastEnd = lE;
         }
-        if (lastEnd !== -1) applyOverlapOverwrite(block.end, block.end + 1, '</Fragment>); }');
-        applyOverlapOverwrite(outer.end, outer.end + 1, ' }) }');
-        switchExprRegex.lastIndex = start + 1;
+        if (lastEnd !== -1) applyOverlapOverwrite(block.end, block.end, '</Fragment>);');
+        applyOverlapOverwrite(block.end, block.end + 1, '} } }');
+        return block.end + 1;
     }
 
-    // FOR - with context check
-    const forExprRegex = /\{\s*for\s*\(/g;
-    while ((match = forExprRegex.exec(currentCode)) !== null) {
-        const ctx = getJsxContext(currentCode, match.index);
-        if (!ctx.shouldTransform) continue; // SAFETY GUARD
-        const start = match.index;
-        const outer = parseBlock(currentCode, start);
-        if (!outer) continue;
-
-        let i = consumeWhitespace(currentCode, start + 1);
-        if (!currentCode.slice(i).startsWith('for')) continue;
-        i += 3;
-        i = consumeWhitespace(currentCode, i);
-
-        const condResult = extractCondition(currentCode, i);
-        if (!condResult) continue;
-
-        // Match "item in list" precisely to find offsets (using [^] for multiline)
-        const forCond = condResult.cond;
-        const inMatch = forCond.match(/^(\s*)(\S+)(\s+in\s+)([^]*)$/);
-        if (!inMatch) continue;
-
-        const item = inMatch[2].trim();
-        const listStr = inMatch[4]; // Use raw for offsets to avoid drift
-
-        // --- KEY PARSING (Surgical) ---
-        let keyExpr = null;
-        let keyStart = -1, keyEnd = -1;
-        // Default: move i past the condition closing paren
-        i = consumeWhitespace(currentCode, condResult.end);
-
-        if (currentCode.startsWith('key', i)) {
-            let kPtr = consumeWhitespace(currentCode, i + 3);
-            if (currentCode[kPtr] === '=') {
-                kPtr = consumeWhitespace(currentCode, kPtr + 1);
-                if (currentCode[kPtr] === '{') {
-                    const kb = parseBlock(currentCode, kPtr);
-                    if (kb) {
-                        keyExpr = currentCode.substring(kb.start + 1, kb.end);
-                        keyStart = kb.start + 1;
-                        keyEnd = kb.end;
-                        i = consumeWhitespace(currentCode, kb.end + 1);
-                    }
-                } else {
-                    let kStart = kPtr;
-                    while (kPtr < currentCode.length && !/\s/.test(currentCode[kPtr]) && currentCode[kPtr] !== '{') kPtr++;
-                    keyExpr = currentCode.substring(kStart, kPtr);
-                    keyStart = kStart;
-                    keyEnd = kPtr;
-                    i = consumeWhitespace(currentCode, kPtr);
-                }
-            }
-        }
-
-        if (currentCode[i] !== '{') continue;
-        const block = parseBlock(currentCode, i);
-        if (!block) continue;
-
-        const listStartRel = inMatch[1].length + inMatch[2].length + inMatch[3].length;
-        const listStart = condResult.start + 1 + listStartRel;
-        const listEnd = listStart + listStr.length;
-
-        if (keyExpr && keyStart !== -1) {
-            applyOverlapOverwrite(start, listStart, `{createElement(ForKeyed, { each: () => `);
-            applyOverlapOverwrite(listEnd, keyStart, `, key: (${item}) => `);
-            applyOverlapOverwrite(keyEnd, i + 1, ` }, (${item}) => (<Fragment>`);
-            applyOverlapOverwrite(block.end, outer.end + 1, '</Fragment>)) }');
-        } else {
-            // Unkeyed or keyExpr extraction failed surgically
-            applyOverlapOverwrite(start, listStart, `{(() => `);
-            applyOverlapOverwrite(listEnd, i + 1, `.map((${item}) => (<Fragment>`);
-            applyOverlapOverwrite(block.end, outer.end + 1, '</Fragment>)))}');
-        }
-        forExprRegex.lastIndex = start + 1;
-    }
-
-
-    // TRY/CATCH - with context check
-    const tryExprRegex = /\{\s*try\s*[\(\{]/g;
-    while ((match = tryExprRegex.exec(currentCode)) !== null) {
-        const ctx = getJsxContext(currentCode, match.index);
-        if (!ctx.shouldTransform) continue; // SAFETY GUARD
-        const start = match.index;
-        const outer = parseBlock(currentCode, start);
-        if (!outer) continue;
-
-        let i = consumeWhitespace(currentCode, start + 1);
-        if (!currentCode.slice(i).startsWith('try')) continue;
-        i += 3;
-        i = consumeWhitespace(currentCode, i);
-
-        // Check for reactive try: try(expr) {...}
+    function handleTry(startPtr) {
+        let ptr = consumeWhitespace(code, startPtr + 3);
         let reactiveExprReq = null;
-        if (currentCode[i] === '(') {
-            const condResult = extractCondition(currentCode, i);
-            if (condResult) {
-                reactiveExprReq = condResult; // Keep the whole result to access offsets
-                i = consumeWhitespace(currentCode, condResult.end);
-            }
-        }
+        if (code[ptr] === '(') { const c = extractCondition(code, ptr); reactiveExprReq = c; ptr = consumeWhitespace(code, c.end); }
+        if (code[ptr] !== '{') return -1;
+        const tryBlock = parseBlock(code, ptr); if (!tryBlock) return -1;
 
-        // Must have opening brace for try block
-        if (currentCode[i] !== '{') continue;
+        // RECURSIVE: Walk inside try block
+        walkBlockContent(tryBlock.start, tryBlock.end);
 
-        const tryBlock = parseBlock(currentCode, i);
-        if (!tryBlock) continue;
+        ptr = consumeWhitespace(code, tryBlock.end + 1);
+        if (!code.startsWith('catch', ptr)) return -1;
+        const catchStart = ptr;
+        ptr = consumeWhitespace(code, ptr + 5);
+        let catchParam = 'e';
+        if (code[ptr] === '(') { const c = extractCondition(code, ptr); if (c) { catchParam = c.cond.trim(); ptr = consumeWhitespace(code, c.end); } }
+        if (code[ptr] !== '{') return -1;
+        const catchBlock = parseBlock(code, ptr); if (!catchBlock) return -1;
 
-        let j = consumeWhitespace(currentCode, tryBlock.end + 1);
+        // RECURSIVE: Walk inside catch block
+        walkBlockContent(catchBlock.start, catchBlock.end);
 
-        // Must have catch
-        if (!currentCode.slice(j).startsWith('catch')) continue;
-        j += 5;
-        j = consumeWhitespace(currentCode, j);
-
-        // Extract catch parameter
-        let catchParam = 'e'; // Not really used for surgery but good for logic check
-        let catchParamStart = -1, catchParamEnd = -1;
-        if (currentCode[j] === '(') {
-            const catchCondResult = extractCondition(currentCode, j);
-            if (catchCondResult) {
-                catchParam = catchCondResult.cond.trim() || 'e';
-                catchParamStart = catchCondResult.start;
-                catchParamEnd = catchCondResult.end;
-                j = consumeWhitespace(currentCode, catchCondResult.end);
-            }
-        }
-
-        // Must have catch block
-        if (currentCode[j] !== '{') continue;
-
-        const catchBlock = parseBlock(currentCode, j);
-        if (!catchBlock) continue;
-
-        const tryKeywordStart = consumeWhitespace(currentCode, start + 1);
-        const catchKeywordStart = consumeWhitespace(currentCode, tryBlock.end + 1);
-
-        // Apply transformations
         if (reactiveExprReq) {
-            // {try(expr) { body } catch(e) { catchBody }}
-            // Target:
-            // 1. '{try' -> '{(() => { try'
-            // 2. '(' of expr -> ' {'
-            // 3. ')' of expr -> ';'
-            // 4. '{' of tryBlock -> ' return (<Fragment>'
-            // 5. '}' of tryBlock -> '</Fragment>); }'
-            // 6. catch...
-
-            applyOverlapOverwrite(start, tryKeywordStart, '{() => { ');
-
-            // Preserve 'expr' by transforming specific tokens around it
-            const condStart = reactiveExprReq.start; // index of '('
-            const condEnd = reactiveExprReq.end;     // index after ')'
-
-            // Replace 'try' + whitespace + '(' -> ' try {'
-            // Note: tryKeywordStart points to 't' of try.
-            // We want to keep 'try' literally if possible, or just overwrite safely.
-            // Let's overwrite 'try ... (' with 'try {' 
-            // BUT careful: if we overwrite 'try', we lose mapped 'try'. 
-            // Better: Keep 'try' (3 chars). Overwrite whitespace + '(' with ' {'
-
-            // tryKeywordStart + 3 is end of 'try'.
-            applyOverlapOverwrite(tryKeywordStart + 3, condStart + 1, ' { ');
-
-            // Overwrite ')' -> ';'
-            applyOverlapOverwrite(condEnd - 1, condEnd, ';');
-
-            // Overwrite whitespace + '{' -> ' return (<Fragment>'
-            applyOverlapOverwrite(condEnd, tryBlock.start + 1, ' return (<Fragment>');
-
-            applyOverlapOverwrite(tryBlock.end, catchKeywordStart, '</Fragment>); } ');
-
-            // Keep 'catch(e)' exactly as-is
-            applyOverlapOverwrite(catchBlock.start, catchBlock.start + 1, '{ return (<Fragment>');
-            applyOverlapOverwrite(catchBlock.end, outer.end + 1, '</Fragment>); } }}');
-
+            applyOverlapOverwrite(startPtr, reactiveExprReq.start, '{ () => { try { ');
+            applyOverlapOverwrite(reactiveExprReq.end, tryBlock.start + 1, '; return (<Fragment>');
         } else {
-            // Static try
-            applyOverlapOverwrite(start, tryKeywordStart, '{(() => { ');
-            applyOverlapOverwrite(tryKeywordStart + 3, tryBlock.start + 1, ' { return (<Fragment>');
-            applyOverlapOverwrite(tryBlock.end, catchKeywordStart, '</Fragment>); } ');
-            applyOverlapOverwrite(catchBlock.start, catchBlock.start + 1, '{ return (<Fragment>');
-            applyOverlapOverwrite(catchBlock.end, outer.end + 1, '</Fragment>); } })()}');
+            applyOverlapOverwrite(startPtr, tryBlock.start + 1, '{ (() => { try { return (<Fragment>');
         }
-        tryExprRegex.lastIndex = start + 1;
+        applyOverlapOverwrite(tryBlock.end, catchStart, '</Fragment>); } ');
+        applyOverlapOverwrite(catchStart + 5, catchBlock.start + 1, `(${catchParam}) { return (<Fragment>`);
+        if (reactiveExprReq) applyOverlapOverwrite(catchBlock.end, catchBlock.end + 1, '</Fragment>); } } }');
+        else applyOverlapOverwrite(catchBlock.end, catchBlock.end + 1, '</Fragment>); } })() }');
+        return catchBlock.end + 1;
     }
 
-    // SIGNALS - with context check
+    // SIGNALS
     const sigRegex = /\{\s*([A-Za-z_$][\w$]*)\s*\(\s*\)\s*\}/g;
-    while ((match = sigRegex.exec(currentCode)) !== null) {
-        const ctx = getJsxContext(currentCode, match.index);
-        if (!ctx.shouldTransform) continue; // SAFETY GUARD
+    let match;
+    while ((match = sigRegex.exec(code)) !== null) {
         const bE = match[0].indexOf(match[1]);
         applyOverlapOverwrite(match.index, match.index + bE, '{() => ');
     }
     const sigAttrRegex = /=\{\s*([A-Za-z_$][\w$]*)\s*\(\s*\)\s*\}/g;
-    while ((match = sigAttrRegex.exec(currentCode)) !== null) {
-        // Attributes are always in JSX tag (depth > 0). Guard is good practice.
-        const ctx = getJsxContext(currentCode, match.index);
-        if (ctx.jsxDepth === 0) continue; // SAFETY GUARD
+    while ((match = sigAttrRegex.exec(code)) !== null) {
         const bE = match[0].indexOf(match[1]);
         applyOverlapOverwrite(match.index, match.index + bE, '={() => ');
     }

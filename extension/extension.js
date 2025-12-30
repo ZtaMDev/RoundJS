@@ -106,7 +106,7 @@ function activate(context) {
                     body: "{try {\n\t$0\n} catch(e) {\n\t\n}}",
                 },
                 {
-                    label: 'round:tryreactive',
+                    label: 'round:tryreactive',  
                     detail: 'Round JSX reactive try(signal) block',
                     body: "{try(${1:signal()}) {\n\t$0\n} catch(e) {\n\t\n}}",
                 }
