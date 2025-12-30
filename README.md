@@ -84,10 +84,10 @@ round init myapp
 cd myapp
 
 # Install dependencies
-npm install
+bun install
 
 # Run the app
-npm run dev
+bun run dev
 ```
 
 This scaffolds a minimal Round app with `src/app.round` and an example `src/counter.round`.
@@ -115,7 +115,7 @@ export default function App() {
 }
 ```
 
-## Core API
+## Core API & Examples
 
 ### `signal(initialValue)`
 
@@ -125,15 +125,31 @@ Create a reactive signal.
 - Call with one argument to **write**.
 - Use `.value` to read/write the current value in a non-subscribing way (static access).
 
+### `derive(fn)`
+
+Create a computed signal that updates automatically when its dependencies change.
+
+#### Example: Reactive Counter
+
+This example demonstrates `signal`, `derive`, and the **JSX control flow** `if` block.
+
 ```jsx
-import { signal } from 'round-core';
+import { signal, derive } from 'round-core';
 
 export default function Counter() {
     const count = signal(0);
+    // Derive creates a readonly signal that updates when count changes
+    const doubled = derive(() => count() * 2);
 
     return (
         <div>
-            <h1>Count: {count()}</h1>
+            <h1>Count: {count()} (Doubled: {doubled()})</h1>
+            
+            {/* Control flow is part of the Round JSX superset */}
+            {if(count() > 5){
+                 <p style="color: red">Count is high!</p>
+            }}
+
             <div style={{ display: 'flex', gap: '8px' }}>
                 <button onClick={() => count(count() + 1)}>Increment</button>
                 <button onClick={() => count(count() - 1)}>Decrement</button>
@@ -151,21 +167,93 @@ RoundJS utilizes a high-performance reactivity engine designed for efficiency an
 - **Global Versioning (Clock)**: Every signal write increments a global version counter. Computed signals (`derive`) track the version of their dependencies and only recompute if they are "dirty" (out of date). This ensures true lazyness and avoids redundant calculations.
 - **Automatic Batching**: Multiple signal updates within the same execution cycle are batched. Effects and DOM updates only trigger once at the end of the batch, preventing "glitches" and unnecessary re-renders.
 
+## JSX superset control flow
 
-### `derive(fn)`
+Round extends JSX inside `.round` files with a control-flow syntax that compiles to JavaScript. This is preferred over ternary operators for complex logic.
 
-Create a computed signal that updates automatically when its dependencies change.
+### `if / else if / else`
 
-```javascript
-import { signal, derive } from 'round-core';
-
-const count = signal(1);
-const double = derive(() => count() * 2);
-
-console.log(double()); // 2
-count(5);
-console.log(double()); // 10
+```jsx
+{if(user.loggedIn){
+    <Dashboard />
+} else if(user.loading){
+    <div>Loading...</div>
+} else {
+    <Login />
+}}
 ```
+
+Notes:
+- Conditions may be normal JS expressions.
+- For *simple paths* like `flags.showCounter` (identifier/member paths), Round will auto-unwrap signal-like values (call them) so the condition behaves as expected.
+- Multiple elements inside a block are automatically wrapped in a Fragment.
+
+### `for (... in ...)`
+
+```jsx
+{for(item in items()) key=item.id {
+    <div className="row">{item.name}</div>
+}}
+```
+
+This compiles to efficient **keyed reconciliation** using the `ForKeyed` runtime component. 
+
+#### Keyed vs Unkeyed
+- **Keyed (Recommended)**: By providing `key=expr`, Round maintains the identity of DOM nodes. If the list reorders, Round moves the existing nodes instead of recreating them. This preserves local state (like input focus, cursor position, or CSS animations).
+- **Unkeyed**: If no key is provided, Round simply maps over the list. Reordering the list will cause nodes to be reused based on their index, which might lead to state issues in complex lists.
+
+### `switch(...)`
+
+```jsx
+{switch(status()){
+    case 'loading': 
+        <Spinner />;
+    case 'error':
+        <ErrorMessage />;
+    default:
+        <DataView />;
+}}
+```
+
+Notes:
+- The `switch` expression is automatically wrapped in a reactive tracker, ensuring that the view updates surgically when the condition (e.g., a signal) changes.
+- Each case handles its own rendering without re-running the parent component.
+
+### `try / catch`
+
+Round supports both static and **reactive** `try/catch` blocks inside JSX.
+
+- **Static**: Just like standard JS, but renders fragments.
+- **Reactive**: By passing one or more signals to `try(...)`, the block will **automatically re-run** if any of those signals (or their dependencies) update. This is perfect for handling transient errors in async data.
+
+**Single dependency:**
+```jsx
+{try(user()) {
+    // Note: we access .error because it is a asyncSignal() not a normal signal
+    {if(user().error){
+        throw new Error(user().error);
+    }}
+    <Profile data={user()} />
+} catch(e) {
+    <div className="error"> Failed to load user: {e.message} </div>
+}}
+```
+
+**Multiple dependencies:**
+You can track multiple signals by listing them using the comma operator. Both signals will be tracked.
+
+```jsx
+{try(signal1(), signal2()) {
+    <div>
+        Data 1: {signal1()}
+        Data 2: {signal2()}
+    </div>
+} catch(e) {
+    <div>One of the signals threw an error!</div>
+}}
+```
+
+## Additional Core API
 
 ### `effect(fn)`
 
@@ -327,7 +415,7 @@ store.persist('my-app-store', {
 // 4. Advanced Methods
 store.patch({ filter: 'completed' }); // Update multiple keys at once
 const data = store.snapshot({ reactive: false }); // Get static JSON of state
-store.set('todos', []); // Direct set
+store.set('todos', []); // Direct set(sets all todos to [] it wont save to storage)
 ```
 
 ### `.validate(validator, options)`
@@ -390,75 +478,6 @@ export function MyComponent() {
 
     return <div>Hello</div>;
 }
-```
-
-## JSX superset control flow
-
-Round extends JSX inside `.round` files with a control-flow syntax that compiles to JavaScript.
-
-### `if / else if / else`
-
-```jsx
-{if(user.loggedIn){
-    <Dashboard />
-} else if(user.loading){
-    <div>Loading...</div>
-} else {
-    <Login />
-}}
-```
-
-Notes:
-
-- Conditions may be normal JS expressions.
-- For *simple paths* like `flags.showCounter` (identifier/member paths), Round will auto-unwrap signal-like values (call them) so the condition behaves as expected.
-- Multiple elements inside a block are automatically wrapped in a Fragment.
-
-### `for (... in ...)`
-
-```jsx
-{for(item in items()) key=item.id {
-    <div className="row">{item.name}</div>
-}}
-```
-
-This compiles to efficient **keyed reconciliation** using the `ForKeyed` runtime component. 
-
-#### Keyed vs Unkeyed
-- **Keyed (Recommended)**: By providing `key=expr`, Round maintains the identity of DOM nodes. If the list reorders, Round moves the existing nodes instead of recreating them. This preserves local state (like input focus, cursor position, or CSS animations).
-- **Unkeyed**: If no key is provided, Round simply maps over the list. Reordering the list will cause nodes to be reused based on their index, which might lead to state issues in complex lists.
-
-### `switch(...)`
-
-```jsx
-{switch(status()){
-    case 'loading': return <Spinner />;
-    case 'error':   return <ErrorMessage />;
-    default:        return <DataView />;
-}}
-```
-
-Notes:
-- The `switch` expression is automatically wrapped in a reactive tracker, ensuring that the view updates surgically when the condition (e.g., a signal) changes.
-- Each case handles its own rendering without re-running the parent component.
-
-### `try / catch`
-
-Round supports both static and **reactive** `try/catch` blocks inside JSX.
-
-- **Static**: Just like standard JS, but renders fragments.
-- **Reactive**: By passing a signal to `try(signal)`, the block will **automatically re-run** if the signal (or its dependencies) update. This is perfect for handling transient errors in async data.
-
-```jsx
-{try(user()) {
-    {if(user() && user().name) {
-        <div>Hello {user().name}</div>
-    } else if(user.pending()) {
-        <div>⏳ Loading...</div>
-    }}
-} catch(e) {
-    <div className="error"> Failed to load user: {e.message} </div>
-}}
 ```
 
 ## Routing
