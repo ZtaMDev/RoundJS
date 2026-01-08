@@ -50,8 +50,5 @@
         "@types/node": "latest",
         "bun-types": "latest",
         "vitest": "^1.6.0"
-    },
-    "peerDependencies": {
-        "bun": ">=1.0.0"
     }
 }
