@@ -80,9 +80,21 @@ export function transform(code, initialDepth = 0) {
         const t = String(expr ?? '').trim();
         if (!t) return '{null}';
         const isInvokedIife = /\)\s*\(\s*\)\s*$/.test(t);
-        const isThunk = (t.startsWith('function') || t.startsWith('() =>') || t.startsWith('(() =>')) && !isInvokedIife;
-        if (isThunk) return `{(${t})()}`;
-        return `{${t}}`;
+
+        // In Round, passing a function as a JSX child is how fine-grained reactivity is achieved.
+        // So for control-flow we must NOT immediately invoke thunks.
+        const isThunk =
+            t.startsWith('function') ||
+            t.startsWith('() =>') ||
+            t.startsWith('async () =>') ||
+            t.startsWith('(() =>') ||
+            t.startsWith('(async () =>') ||
+            /^\([^)]*\)\s*=>/.test(t);
+
+        if (isThunk && !isInvokedIife) return `{${t}}`;
+
+        // Otherwise, wrap the expression in a thunk so it can track signal dependencies.
+        return `{() => (${t})}`;
     }
 
     function parseBlock(str, startIndex) {
