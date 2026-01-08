@@ -66,6 +66,14 @@
 			]
 		},
 		{
+			"open": "`",
+			"close": "`",
+			"notIn": [
+				"string",
+				"comment"
+			]
+		},
+		{
 			"open": "/**",
 			"close": " */",
 			"notIn": [
@@ -76,7 +84,16 @@
 			"open": "<",
 			"close": ">",
 			"notIn": [
-				"string"
+				"string",
+				"comment"
+			]
+		},
+		{
+			"open": "</",
+			"close": ">",
+			"notIn": [
+				"string",
+				"comment"
 			]
 		}
 	],
@@ -104,6 +121,10 @@
 		[
 			"\"",
 			"\""
+		],
+		[
+			"`",
+			"`"
 		]
 	],
 	"wordPattern": {

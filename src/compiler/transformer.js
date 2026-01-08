@@ -12,6 +12,79 @@ export function transform(code, initialDepth = 0) {
 
     // --- Helpers ---
 
+    function prevNonWsIndex(str, fromIndex) {
+        for (let k = fromIndex; k >= 0; k--) {
+            if (!/\s/.test(str[k])) return k;
+        }
+        return -1;
+    }
+
+    function prevWord(str, fromIndex) {
+        let k = fromIndex;
+        while (k >= 0 && /[\w$]/.test(str[k])) k--;
+        const w = str.slice(k + 1, fromIndex + 1);
+        return w;
+    }
+
+    function isRegexStart(str, slashIndex) {
+        const next = str[slashIndex + 1] || '';
+        if (next === '/' || next === '*') return false;
+
+        const prevIdx = prevNonWsIndex(str, slashIndex - 1);
+        if (prevIdx === -1) return true;
+
+        const prev = str[prevIdx];
+        if (/[({[=:+\-!*,?;|&~%^<>]/.test(prev)) return true;
+
+        if (/[\w$]/.test(prev)) {
+            const w = prevWord(str, prevIdx);
+            if (w === 'return' || w === 'throw' || w === 'case' || w === 'yield' || w === 'await') return true;
+        }
+
+        return false;
+    }
+
+    function consumeRegexLiteralEnd(str, slashIndex) {
+        let inClass = false;
+        let escaped = false;
+
+        for (let k = slashIndex + 1; k < str.length; k++) {
+            const ch = str[k];
+            if (escaped) {
+                escaped = false;
+                continue;
+            }
+            if (ch === '\\') {
+                escaped = true;
+                continue;
+            }
+            if (ch === '[') {
+                inClass = true;
+                continue;
+            }
+            if (ch === ']' && inClass) {
+                inClass = false;
+                continue;
+            }
+            if (ch === '/' && !inClass) {
+                let end = k + 1;
+                while (end < str.length && /[a-z]/i.test(str[end])) end++;
+                return end;
+            }
+            if (ch === '\n' || ch === '\r') return null;
+        }
+        return null;
+    }
+
+    function wrapControlExpressionForJsx(expr) {
+        const t = String(expr ?? '').trim();
+        if (!t) return '{null}';
+        const isInvokedIife = /\)\s*\(\s*\)\s*$/.test(t);
+        const isThunk = (t.startsWith('function') || t.startsWith('() =>') || t.startsWith('(() =>')) && !isInvokedIife;
+        if (isThunk) return `{(${t})()}`;
+        return `{${t}}`;
+    }
+
     function parseBlock(str, startIndex) {
         let open = 0;
         let startBlockIndex = -1;
@@ -45,6 +118,11 @@ export function transform(code, initialDepth = 0) {
                 if (ch === '"' && prev !== '\\') inDouble = false;
                 else if (ch === '\n' || ch === '\r') inDouble = false; // Reset on newline
                 continue;
+            }
+
+            if (ch === '/' && next !== '/' && next !== '*' && isRegexStart(str, j)) {
+                const end = consumeRegexLiteralEnd(str, j);
+                if (end !== null) { j = end - 1; continue; }
             }
 
             if (ch === '/' && next === '/') { inCommentLine = true; j++; continue; }
@@ -82,6 +160,11 @@ export function transform(code, initialDepth = 0) {
             if (!inDouble && !inTemplate && ch === '\'' && prev !== '\\') inSingle = !inSingle;
             else if (!inSingle && !inTemplate && ch === '"' && prev !== '\\') inDouble = !inDouble;
             else if (!inSingle && !inDouble && ch === '`' && prev !== '\\') inTemplate = !inTemplate;
+
+            if (!inSingle && !inDouble && !inTemplate && ch === '/' && isRegexStart(str, j)) {
+                const end = consumeRegexLiteralEnd(str, j);
+                if (end !== null) { j = end; continue; }
+            }
 
             if (!inSingle && !inDouble && !inTemplate) {
                 if (ch === '(') depth++;
@@ -365,15 +448,11 @@ export function transform(code, initialDepth = 0) {
         }
 
         const finalExprs = expressions.map(e => {
-            if (e.startsWith('function') || e.startsWith('() =>') || e.startsWith('(() =>')) {
-                // It's a thunk. Call it.
-                return `{(${e})()}`;
-            }
-            return `{${e}}`;
+            return wrapControlExpressionForJsx(e);
         });
 
         const sequence = finalExprs.join(' ');
-        const replacement = `{(() => <Fragment>${sequence}</Fragment>)}`;
+        const replacement = `{(<Fragment>${sequence}</Fragment>)}`;
 
         // consume the final '}'
         let endIdx = loopPtr + 1;
@@ -427,6 +506,16 @@ export function transform(code, initialDepth = 0) {
 
         if (ch === '/' && next === '/') { inCommentLine = true; result += '//'; i += 2; continue; }
         if (ch === '/' && next === '*') { inCommentMulti = true; result += '/*'; i += 2; continue; }
+
+        if (ch === '/' && next !== '/' && next !== '*' && isRegexStart(code, i)) {
+            const end = consumeRegexLiteralEnd(code, i);
+            if (end !== null) {
+                result += code.slice(i, end);
+                i = end;
+                continue;
+            }
+        }
+
         if (ch === '`') { inTemplate = true; result += ch; i++; continue; }
         if (ch === '\'') { inSingle = true; result += ch; i++; continue; }
         if (ch === '"') { inDouble = true; result += ch; i++; continue; }
@@ -520,7 +609,7 @@ export function transform(code, initialDepth = 0) {
                     if (code[ptr] === '(') {
                         const res = handleIfContent(i); // Reuse content handler
                         if (res) {
-                            result += `{(() => ${res.expression})}`;
+                            result += wrapControlExpressionForJsx(res.expression);
                             i = res.end;
                             processed = true;
                         }
@@ -530,7 +619,7 @@ export function transform(code, initialDepth = 0) {
                     if (code[ptr] === '(') {
                         const res = handleForContent(i);
                         if (res) {
-                            result += `{${res.expression}}`;
+                            result += wrapControlExpressionForJsx(res.expression);
                             i = res.end;
                             processed = true;
                         }
@@ -542,7 +631,7 @@ export function transform(code, initialDepth = 0) {
                         if (res) {
                             // handleSwitchContent returns `function() ...`
                             // Need `{function() ...}`.
-                            result += `{${res.expression}}`;
+                            result += wrapControlExpressionForJsx(res.expression);
                             i = res.end;
                             processed = true;
                         }
@@ -554,7 +643,7 @@ export function transform(code, initialDepth = 0) {
                         if (res) {
                             // handleTryContent returns `() => ...` or IIFE.
                             // If IIFE `(() => ...)()`, wrap in `{...}`.
-                            result += `{${res.expression}}`;
+                            result += wrapControlExpressionForJsx(res.expression);
                             i = res.end;
                             processed = true;
                         }
@@ -581,6 +670,12 @@ export function transform(code, initialDepth = 0) {
             else if (!inSingle && !inTemplate && c === '"' && p !== '\\') inDouble = !inDouble;
             else if (!inSingle && !inDouble && c === '`' && p !== '\\') inTemplate = !inTemplate;
             if (inSingle || inDouble || inTemplate) continue;
+
+            if (c === '/' && isRegexStart(str, k)) {
+                const end = consumeRegexLiteralEnd(str, k);
+                if (end !== null) { k = end - 1; continue; }
+            }
+
             if (c === '{') braceDepth++;
             else if (c === '}') braceDepth = Math.max(0, braceDepth - 1);
             else if (c === '>' && braceDepth === 0) return k;

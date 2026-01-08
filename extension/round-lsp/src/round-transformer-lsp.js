@@ -44,6 +44,69 @@ declare global {
         edits.push({ offset: 0, length: 0, newLength: VIRTUAL_IMPORT.length });
     }
 
+    function prevNonWsIndex(str, fromIndex) {
+        for (let k = fromIndex; k >= 0; k--) {
+            if (!/\s/.test(str[k])) return k;
+        }
+        return -1;
+    }
+
+    function prevWord(str, fromIndex) {
+        let k = fromIndex;
+        while (k >= 0 && /[\w$]/.test(str[k])) k--;
+        return str.slice(k + 1, fromIndex + 1);
+    }
+
+    function isRegexStart(str, slashIndex) {
+        const next = str[slashIndex + 1] || '';
+        if (next === '/' || next === '*') return false;
+
+        const prevIdx = prevNonWsIndex(str, slashIndex - 1);
+        if (prevIdx === -1) return true;
+
+        const prev = str[prevIdx];
+        if (/[({[=:+\-!*,?;|&~%^<>]/.test(prev)) return true;
+
+        if (/[\w$]/.test(prev)) {
+            const w = prevWord(str, prevIdx);
+            if (w === 'return' || w === 'throw' || w === 'case' || w === 'yield' || w === 'await') return true;
+        }
+
+        return false;
+    }
+
+    function consumeRegexLiteralEnd(str, slashIndex) {
+        let inClass = false;
+        let escaped = false;
+
+        for (let k = slashIndex + 1; k < str.length; k++) {
+            const ch = str[k];
+            if (escaped) {
+                escaped = false;
+                continue;
+            }
+            if (ch === '\\') {
+                escaped = true;
+                continue;
+            }
+            if (ch === '[') {
+                inClass = true;
+                continue;
+            }
+            if (ch === ']' && inClass) {
+                inClass = false;
+                continue;
+            }
+            if (ch === '/' && !inClass) {
+                let end = k + 1;
+                while (end < str.length && /[a-z]/i.test(str[end])) end++;
+                return end;
+            }
+            if (ch === '\n' || ch === '\r') return null;
+        }
+        return null;
+    }
+
     function applyOverlapOverwrite(start, end, content) {
         if (start < 0 || end < start || isNaN(start) || isNaN(end)) return;
         for (const range of editedRanges) {
@@ -66,8 +129,17 @@ declare global {
             if (inTemplate) { if (ch === '`' && prev !== '\\') inTemplate = false; continue; }
             if (inSingle) { if (ch === '\'' && prev !== '\\') inSingle = false; else if (ch === '\n' || ch === '\r') inSingle = false; continue; }
             if (inDouble) { if (ch === '"' && prev !== '\\') inDouble = false; else if (ch === '\n' || ch === '\r') inDouble = false; continue; }
+
+            if (ch === '/' && next !== '/' && next !== '*' && isRegexStart(str, i)) {
+                const end = consumeRegexLiteralEnd(str, i);
+                if (end !== null) { i = end - 1; continue; }
+            }
+
             if (ch === '/' && next === '/') { inCommentLine = true; i++; continue; }
             if (ch === '/' && next === '*') { inCommentMulti = true; i++; continue; }
+            if (ch === '`') { inTemplate = true; continue; }
+            if (ch === '\'') { inSingle = true; continue; }
+            if (ch === '"') { inDouble = true; continue; }
             if (ch === '{') { if (open === 0) startBlockIndex = i; open++; }
             else if (ch === '}') { open--; if (open === 0) return { start: startBlockIndex, end: i }; }
         }
@@ -88,6 +160,12 @@ declare global {
             if (!inDouble && !inTemplate && ch === '\'' && prev !== '\\') inSingle = !inSingle;
             else if (!inSingle && !inTemplate && ch === '"' && prev !== '\\') inDouble = !inDouble;
             else if (!inSingle && !inDouble && ch === '`' && prev !== '\\') inTemplate = !inTemplate;
+
+            if (!inSingle && !inDouble && !inTemplate && ch === '/' && isRegexStart(str, i)) {
+                const end = consumeRegexLiteralEnd(str, i);
+                if (end !== null) { i = end; continue; }
+            }
+
             if (!inSingle && !inDouble && !inTemplate) { if (ch === '(') depth++; else if (ch === ')') depth--; }
             i++;
         }
@@ -130,6 +208,11 @@ declare global {
             if (inDouble) { if (ch === '"' && prev !== '\\') inDouble = false; else if (ch === '\n' || ch === '\r') inDouble = false; continue; }
             if (ch === '/' && next === '/') { inCommentLine = true; i++; continue; }
             if (ch === '/' && next === '*') { inCommentMulti = true; i++; continue; }
+
+            if (ch === '/' && next !== '/' && next !== '*' && isRegexStart(code, i)) {
+                const end = consumeRegexLiteralEnd(code, i);
+                if (end !== null) { i = end - 1; continue; }
+            }
 
             if (inOpeningTag) {
                 if (ch === '=' && !attrBraceDepth) { prevWasEquals = true; continue; }
@@ -181,6 +264,15 @@ declare global {
         if (ch === '/' && next === '/') { inCommentLine = true; i++; continue; }
         if (ch === '/' && next === '*') { inCommentMulti = true; i++; continue; }
 
+        if (ch === '/' && next !== '/' && next !== '*' && isRegexStart(code, i)) {
+            const end = consumeRegexLiteralEnd(code, i);
+            if (end !== null) { i = end - 1; continue; }
+        }
+
+        if (ch === '`') { inTemplate = true; continue; }
+        if (ch === '\'') { inSingle = true; continue; }
+        if (ch === '"') { inDouble = true; continue; }
+
         if (inOpeningTag) {
             if (ch === '=' && !attrBraceDepth) { prevWasEquals = true; continue; }
             if (ch === '{') { if (prevWasEquals || attrBraceDepth > 0) attrBraceDepth++; prevWasEquals = false; continue; }
@@ -215,7 +307,7 @@ declare global {
     }
 
     function handleControlBlock(start, end) {
-        applyOverlapOverwrite(start, start + 1, '{(() => <Fragment>');
+        applyOverlapOverwrite(start, start + 1, '{(<Fragment>');
 
         let ptr = consumeWhitespace(code, start + 1);
 

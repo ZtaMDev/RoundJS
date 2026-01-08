@@ -24,6 +24,137 @@ function normalizePath(p) {
     return path.normalize(p).replace(/\\/g, '/');
 }
 
+function prevNonWsIndex(str, fromIndex) {
+    for (let k = fromIndex; k >= 0; k--) {
+        if (!/\s/.test(str[k])) return k;
+    }
+    return -1;
+}
+
+function prevWord(str, fromIndex) {
+    let k = fromIndex;
+    while (k >= 0 && /[\w$]/.test(str[k])) k--;
+    return str.slice(k + 1, fromIndex + 1);
+}
+
+function isRegexStart(str, slashIndex) {
+    const next = str[slashIndex + 1] || '';
+    if (next === '/' || next === '*') return false;
+
+    const prevIdx = prevNonWsIndex(str, slashIndex - 1);
+    if (prevIdx === -1) return true;
+
+    const prev = str[prevIdx];
+    if (/[({[=:+\-!*,?;|&~%^<>]/.test(prev)) return true;
+
+    if (/[\w$]/.test(prev)) {
+        const w = prevWord(str, prevIdx);
+        if (w === 'return' || w === 'throw' || w === 'case' || w === 'yield' || w === 'await') return true;
+    }
+
+    return false;
+}
+
+function consumeRegexLiteralEnd(str, slashIndex) {
+    let inClass = false;
+    let escaped = false;
+
+    for (let k = slashIndex + 1; k < str.length; k++) {
+        const ch = str[k];
+        if (escaped) {
+            escaped = false;
+            continue;
+        }
+        if (ch === '\\') {
+            escaped = true;
+            continue;
+        }
+        if (ch === '[') {
+            inClass = true;
+            continue;
+        }
+        if (ch === ']' && inClass) {
+            inClass = false;
+            continue;
+        }
+        if (ch === '/' && !inClass) {
+            let end = k + 1;
+            while (end < str.length && /[a-z]/i.test(str[end])) end++;
+            return end;
+        }
+        if (ch === '\n' || ch === '\r') return null;
+    }
+    return null;
+}
+
+function findTagNameToAutoClose(text, cursorOffset) {
+    const gtIndex = cursorOffset - 1;
+    if (gtIndex < 0 || text[gtIndex] !== '>') return null;
+
+    const prevIdx = prevNonWsIndex(text, gtIndex - 1);
+    if (prevIdx !== -1 && text[prevIdx] === '/') return null;
+
+    let inSingle = false;
+    let inDouble = false;
+    let inTemplate = false;
+    let inCommentLine = false;
+    let inCommentMulti = false;
+
+    for (let i = gtIndex - 1; i >= 0; i--) {
+        const ch = text[i];
+        const prev = i > 0 ? text[i - 1] : '';
+        const next = i < text.length - 1 ? text[i + 1] : '';
+
+        if (inCommentLine) {
+            if (ch === '\n' || ch === '\r') inCommentLine = false;
+            continue;
+        }
+        if (inCommentMulti) {
+            if (ch === '/' && prev === '*') { inCommentMulti = false; i--; }
+            continue;
+        }
+        if (inTemplate) {
+            if (ch === '`' && prev !== '\\') inTemplate = false;
+            continue;
+        }
+        if (inSingle) {
+            if (ch === '\'' && prev !== '\\') inSingle = false;
+            continue;
+        }
+        if (inDouble) {
+            if (ch === '"' && prev !== '\\') inDouble = false;
+            continue;
+        }
+
+        if (prev === '/' && ch === '/') { inCommentLine = true; i--; continue; }
+        if (prev === '*' && ch === '/') { inCommentMulti = true; i--; continue; }
+        if (ch === '`') { inTemplate = true; continue; }
+        if (ch === '\'') { inSingle = true; continue; }
+        if (ch === '"') { inDouble = true; continue; }
+
+        if (ch === '/') {
+            const end = consumeRegexLiteralEnd(text, i);
+            if (end !== null && end > gtIndex) return null;
+        }
+
+        if (ch === '<') {
+            const raw = text.slice(i, gtIndex + 1);
+            const trimmed = raw.trim();
+
+            if (trimmed === '<>') return '';
+            if (trimmed.startsWith('</')) return null;
+            if (trimmed.startsWith('<!') || trimmed.startsWith('<?')) return null;
+
+            const m = trimmed.match(/^<\s*([A-Za-z_$][\w$.-]*)\b[\s\S]*>$/);
+            if (!m) return null;
+
+            return m[1];
+        }
+    }
+
+    return null;
+}
+
 const connection = createConnection(ProposedFeatures.all);
 const documents = new TextDocuments(TextDocument);
 
@@ -122,10 +253,45 @@ connection.onInitialize((params) => {
             textDocumentSync: TextDocumentSyncKind.Full,
             hoverProvider: true,
             definitionProvider: true,
-            completionProvider: { resolveProvider: true, triggerCharacters: ['.', '"', "'", '/', '<', '@', '*', ' '] },
+            completionProvider: { resolveProvider: true, triggerCharacters: ['.', '"', "'", '/', '<', '>', '@', '*', ' '] },
+            documentOnTypeFormattingProvider: { firstTriggerCharacter: '>' },
             signatureHelpProvider: { triggerCharacters: ['(', ','] }
         }
     };
+});
+
+connection.onDocumentOnTypeFormatting((params) => {
+    try {
+        if (params.ch !== '>') return null;
+
+        const doc = documents.get(params.textDocument.uri);
+        if (!doc) return null;
+
+        const offset = doc.offsetAt(params.position);
+        const text = doc.getText();
+        const tagName = findTagNameToAutoClose(text, offset);
+        if (tagName === null) return null;
+
+        const closeText = tagName === '' ? '</>' : `</${tagName}>`;
+
+        const nextNonWs = (() => {
+            for (let k = offset; k < text.length; k++) {
+                if (!/\s/.test(text[k])) return k;
+            }
+            return -1;
+        })();
+
+        if (nextNonWs !== -1 && text.startsWith(closeText, nextNonWs)) return null;
+
+        return [
+            {
+                range: { start: params.position, end: params.position },
+                newText: closeText
+            }
+        ];
+    } catch {
+        return null;
+    }
 });
 
 connection.onInitialized(async () => {
@@ -324,14 +490,33 @@ connection.onCompletion((params) => {
         const tsxFsPath = normalizePath(URI.parse(params.textDocument.uri + (vdoc ? '.tsx' : '')).fsPath);
         const doc = vdoc ? vdoc.roundDoc : documents.get(params.textDocument.uri);
         if (!doc) return null;
-        const offset = vdoc ? toGeneratedOffset(doc.offsetAt(params.position), vdoc.edits || []) : doc.offsetAt(params.position);
+        const originalOffset = doc.offsetAt(params.position);
+        const offset = vdoc ? toGeneratedOffset(originalOffset, vdoc.edits || []) : originalOffset;
         const completions = ls.getCompletionsAtPosition(tsxFsPath, offset, { includeExternalModuleExports: true, includeInsertTextCompletions: true });
         if (!completions) return null;
-        return completions.entries.map(entry => ({
+        const out = completions.entries.map(entry => ({
             label: entry.name,
             kind: mapCompletionKind(entry.kind),
             data: { uri: params.textDocument.uri, offset, name: entry.name }
         }));
+
+        if (params.context?.triggerCharacter === '>') {
+            const text = doc.getText();
+            const tagName = findTagNameToAutoClose(text, originalOffset);
+            if (tagName !== null) {
+                const closeText = tagName === '' ? '</>' : `</${tagName}>`;
+                out.unshift({
+                    label: closeText,
+                    kind: 15,
+                    sortText: '\u0000',
+                    insertTextFormat: 2,
+                    insertText: `$0${closeText}`,
+                    data: { uri: params.textDocument.uri, offset, name: '__round_autoclose_tag__' }
+                });
+            }
+        }
+
+        return out;
     } catch (e) { return null; }
 });
 

@@ -12,5 +12,4 @@ vsc-extension-quickstart.md
 esbuild.js
 syntaxes/Readme.md
 cgmanifest.json
-node_modules/**
 **/*.map
