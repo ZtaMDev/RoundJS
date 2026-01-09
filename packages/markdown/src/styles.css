@@ -1,0 +1,21 @@
+.round-md{line-height:1.6;font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:var(--round-md-bg,#020617);color:var(--round-md-text,#e5e7eb);padding:1.25rem 1.5rem;border-radius:16px;border:1px solid rgba(148,163,184,.35)}.round-md pre{margin:0}
+.round-md{--round-md-code-bg:linear-gradient(180deg,rgba(15,18,28,.96),rgba(10,12,18,.96));--round-md-code-header-bg:rgba(255,255,255,.06);--round-md-code-border:rgba(255,255,255,.12);--round-md-code-text:rgba(255,255,255,.92);--round-md-code-header-text:rgba(255,255,255,.78);--round-md-code-copy-bg:rgba(255,255,255,.06);--round-md-code-copy-text:rgba(255,255,255,.86);--round-md-code-copy-border:rgba(255,255,255,.14);--round-md-code-radius:12px;--round-md-scrollbar-track:rgba(255,255,255,.05);--round-md-scrollbar-thumb:rgba(255,255,255,.14);--round-md-scrollbar-thumb-hover:rgba(255,255,255,.22);--round-md-scrollbar-size:10px;--round-md-primary:#e5e7eb;--round-md-secondary:#60a5fa}
+.round-md-h1{font-size:2rem;margin:1.5rem 0 .75rem;font-weight:600;color:var(--round-md-primary)}.round-md-h2{font-size:1.7rem;margin:1.4rem 0 .7rem;font-weight:600;color:var(--round-md-primary)}.round-md-h3{font-size:1.4rem;margin:1.2rem 0 .6rem;font-weight:600;color:var(--round-md-primary)}.round-md-h4,.round-md-h5,.round-md-h6{font-size:1.1rem;margin:1rem 0 .5rem;font-weight:600;color:var(--round-md-primary)}
+.round-md-p{margin:.5rem 0;color:inherit}
+.round-md-list{margin:.5rem 0 .5rem 1.4rem;padding:0}.round-md-li{margin:.25rem 0}.round-md-li--task{list-style:none;display:flex;align-items:flex-start;gap:.5rem}
+.round-md-blockquote{margin:1rem 0;padding:.75rem 1rem;border-left:3px solid rgba(148,163,184,.7);background:rgba(15,23,42,.45);border-radius:.5rem;font-style:italic}
+.round-md-link{color:var(--round-md-secondary,#60a5fa);text-decoration:underline;text-decoration-thickness:1px;text-underline-offset:2px}
+.round-md-inline-code{font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,"Liberation Mono","Courier New",monospace;font-size:.95em;padding:.1em .3em;border-radius:.25em;background:rgba(15,23,42,.85);border:1px solid rgba(148,163,184,.45)}
+.round-md-hr{border:0;border-top:1px solid rgba(148,163,184,.4);margin:1.5rem 0}
+.round-md-code{border:1px solid var(--round-md-code-border);border-radius:var(--round-md-code-radius);overflow:hidden;background:var(--round-md-code-bg);box-shadow:0 10px 30px rgba(0,0,0,.25)}
+.round-md-code__header{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:9px 10px;border-bottom:1px solid var(--round-md-code-border);background:var(--round-md-code-header-bg)}
+.round-md-code__lang{font:600 12px/1.2 ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,"Liberation Mono","Courier New",monospace;color:var(--round-md-code-header-text);text-transform:lowercase;letter-spacing:.02em}
+.round-md-code__copy{appearance:none;border:1px solid var(--round-md-code-copy-border);background:var(--round-md-code-copy-bg);color:var(--round-md-code-copy-text);padding:5px 9px;border-radius:10px;font:600 12px/1 ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,"Liberation Mono","Courier New",monospace;cursor:pointer}
+.round-md-code__copy:hover{background:rgba(255,255,255,.1)}
+.round-md-code__body{padding:12px;overflow:auto;color:var(--round-md-code-text)}
+.round-md-code__body{scrollbar-color:var(--round-md-scrollbar-thumb) var(--round-md-scrollbar-track);scrollbar-width:thin}
+.round-md-code__body::-webkit-scrollbar{height:var(--round-md-scrollbar-size);width:var(--round-md-scrollbar-size)}
+.round-md-code__body::-webkit-scrollbar-track{background:var(--round-md-scrollbar-track)}
+.round-md-code__body::-webkit-scrollbar-thumb{background:var(--round-md-scrollbar-thumb);border-radius:999px;border:2px solid transparent;background-clip:padding-box}
+.round-md-code__body::-webkit-scrollbar-thumb:hover{background:var(--round-md-scrollbar-thumb-hover);background-clip:padding-box}
+.round-md code{font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,"Liberation Mono","Courier New",monospace;font-size:.95em}

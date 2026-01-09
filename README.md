@@ -115,6 +115,100 @@ export default function App() {
 }
 ```
 
+## Markdown rendering with `@round-core/markdown`
+
+Round includes an optional companion package for markdown rendering with
+syntax highlighting and rich code blocks.
+
+Install it alongside `round-core`:
+
+```bash
+npm install @round-core/markdown
+```
+
+or with Bun:
+
+```bash
+bun add @round-core/markdown
+```
+
+Then use it in a `.round` file or JSX component:
+
+```jsx
+import { createElement } from 'round-core';
+import { Markdown, defaultMarkdownStyles as markdown } from '@round-core/markdown';
+import '@round-core/markdown/styles.css';
+
+export default function App() {
+    const content = `
+# Markdown with code blocks
+
+You can render fenced code blocks with syntax highlighting:
+
+\`\`\`javascript
+import { Markdown } from '@round-core/markdown';
+
+export default function App() {
+  return (
+    <div>
+      <Markdown content="# Hello World" />
+    </div>
+  );
+}
+\`\`\`
+`;
+
+    return (
+        <div>
+            {/* Shiki highlighter preloaded for faster first paint */}
+            <Markdown
+                content={content}
+                options={{
+                    preloadHighlighter: true,
+                    theme: {
+                        markdownBackground: '#020617',
+                        markdownText: '#e5e7eb',
+                        primaryColor: '#e5e7eb',
+                        secondaryColor: '#38bdf8',
+                    }
+                }}
+            />
+        </div>
+    );
+}
+```
+
+You can also theme the markdown surface (background/text) and accents via
+`options.theme`:
+
+```jsx
+<Markdown
+  content={content}
+  options={{
+    theme: {
+      // Dark card-like surface
+      markdownBackground: '#020617',
+      markdownText: '#e5e7eb',
+      primaryColor: '#e5e7eb',
+      secondaryColor: '#38bdf8',
+    },
+  }}
+/>
+
+<Markdown
+  content={content}
+  options={{
+    theme: {
+      // Light mode
+      markdownBackground: '#ffffff',
+      markdownText: '#0f172a',
+      primaryColor: '#0f172a',
+      secondaryColor: '#2563eb',
+    },
+  }}
+/>
+```
+
 ## Core API & Examples
 
 ### `signal(initialValue)`
