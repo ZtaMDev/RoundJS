@@ -35,7 +35,21 @@ function getSharedHighlighter(options) {
   if (!sharedHighlighterPromise) {
     sharedHighlighterPromise = createHighlighter({
       themes: ['github-dark'],
-      langs: ['javascript', 'typescript', 'json', 'css', 'html', 'bash', 'markdown']
+      // Load a broad set of common languages explicitly so users get
+      // reliable highlighting for typical code samples.
+      langs: [
+        'javascript', 'typescript', 'jsx', 'tsx',
+        'json', 'jsonc',
+        'css', 'scss', 'less',
+        'html', 'xml',
+        'markdown', 'mdx',
+        'bash', 'shell', 'sh',
+        'yaml', 'toml',
+        'python', 'rust', 'go', 'java',
+        'c', 'cpp', 'csharp',
+        'php', 'ruby', 'swift', 'kotlin', 'dart', 'lua',
+        'sql'
+      ]
     });
   }
   return async () => sharedHighlighterPromise;
@@ -107,6 +121,10 @@ export function Markdown(props = /** @type {MarkdownProps} */({})) {
   const makeRenderer = () => {
     const renderer = new marked.Renderer();
 
+    // Custom rendering only for fenced code blocks (to add header, copy button, etc.).
+    // For all other markdown elements we use the default marked renderer so that
+    // inline formatting (**bold**, links, etc.) works correctly without
+    // introducing [object Object] issues with token objects.
     renderer.code = (code, infostring) => {
       let rawCode = code;
       let rawInfo = infostring;
@@ -135,101 +153,6 @@ export function Markdown(props = /** @type {MarkdownProps} */({})) {
         `</div>`;
 
       return raw;
-    };
-
-    renderer.heading = (text, level) => {
-      let inner = text;
-      let depth = level;
-
-      if (text && typeof text === 'object') {
-        inner = text.text ?? '';
-        depth = text.depth ?? level;
-      }
-
-      const lvl = Math.min(Math.max(Number(depth) || 1, 1), 6);
-      const cls =
-        lvl === 1 ? classes.h1Class :
-        lvl === 2 ? classes.h2Class :
-        lvl === 3 ? classes.h3Class :
-        lvl === 4 ? classes.h4Class :
-        lvl === 5 ? classes.h5Class :
-        classes.h6Class;
-      const safeText = inner;
-      const safeClass = escapeHtml(cls || '');
-      return `<h${lvl}${safeClass ? ` class="${safeClass}"` : ''}>${safeText}</h${lvl}>`;
-    };
-
-    renderer.paragraph = (text) => {
-      // Support both string and token object signatures
-      let inner = text;
-      if (text && typeof text === 'object') {
-        inner = text.text ?? '';
-      }
-
-      const cls = classes.paragraphClass;
-      const safeClass = escapeHtml(cls || '');
-      return `<p${safeClass ? ` class="${safeClass}"` : ''}>${inner}</p>`;
-    };
-
-    renderer.list = (body, ordered, start) => {
-      const cls = classes.listClass;
-      const safeClass = escapeHtml(cls || '');
-      const type = ordered ? 'ol' : 'ul';
-      const startAttr = ordered && start != null && start !== 1 ? ` start="${start}"` : '';
-      return `<${type}${safeClass ? ` class="${safeClass}"` : ''}${startAttr}>\n${body}</${type}>\n`;
-    };
-
-    renderer.listitem = (text, task, checked) => {
-      let isTask = false;
-      let isChecked = false;
-
-      if (text && typeof text === 'object') {
-        // marked v17 object signature
-        isTask = !!text.task;
-        isChecked = !!text.checked;
-        text = text.text || '';
-      } else {
-        isTask = !!task;
-        isChecked = !!checked;
-      }
-
-      const baseCls = classes.listItemClass;
-      const taskCls = classes.taskListItemClass;
-      const cls = joinClass(baseCls, isTask ? taskCls : null);
-      const safeClass = escapeHtml(cls || '');
-
-      const checkbox = isTask
-        ? `<input type="checkbox" disabled${isChecked ? ' checked' : ''} /> `
-        : '';
-
-      return `<li${safeClass ? ` class="${safeClass}"` : ''}>${checkbox}${text}</li>\n`;
-    };
-
-    renderer.blockquote = (quote) => {
-      const cls = classes.blockquoteClass;
-      const safeClass = escapeHtml(cls || '');
-      return `<blockquote${safeClass ? ` class="${safeClass}"` : ''}>\n${quote}\n</blockquote>\n`;
-    };
-
-    renderer.link = (href, title, text) => {
-      const cls = classes.linkClass;
-      const safeClass = escapeHtml(cls || '');
-      const safeHref = escapeHtml(href || '');
-      const titleAttr = title ? ` title="${escapeHtml(title)}"` : '';
-      return `<a href="${safeHref}"${titleAttr}${safeClass ? ` class="${safeClass}"` : ''}>${text}</a>`;
-    };
-
-    renderer.codespan = (code) => {
-      const cls = classes.inlineCodeClass;
-      const safeClass = escapeHtml(cls || '');
-      const safeCode = escapeHtml(code);
-      return `<code${safeClass ? ` class="${safeClass}"` : ''}>${safeCode}</code>`;
-    };
-
-    renderer.hr = () => {
-      const cls = classes.hrClass;
-      const safeClass = escapeHtml(cls || '');
-      return `<hr${safeClass ? ` class="${safeClass}"` : ''} />`;
     };
 
     return renderer;
