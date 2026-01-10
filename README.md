@@ -125,6 +125,45 @@ Create a reactive signal.
 - Call with one argument to **write**.
 - Use `.value` to read/write the current value in a non-subscribing way (static access).
 
+```jsx
+import { signal } from 'round-core';
+
+export function Counter() {
+    const count = signal(0);
+
+    return (
+        <div>
+            <p>Count: {count()}</p>
+
+            <button onClick={() => count(count() + 1)}>
+                Increment
+            </button>
+
+            <button onClick={() => count(0)}>
+                Reset
+            </button>
+        </div>
+    );
+}
+```
+##### Explanation:
+
+- `signal(0)` creates a reactive value initialized to 0
+
+- `Calling count()` reads the current value and subscribes the DOM
+
+- `Calling count(newValue)` writes a new value and updates only the subscribed nodes
+
+- The component function runs once — only the text node updates when count changes
+
+#### Non-reactive (static) access with .value
+```jsx
+const count = signal(5);
+
+// Read without tracking
+console.log(count.value); // 5
+```
+
 ### `asyncSignal(fetcher)`
 
 Create a signal that manages asynchronous data fetching.
@@ -157,6 +196,14 @@ export function UserProfile() {
     );
 }
 ```
+
+### Signals Internals
+
+RoundJS utilizes a high-performance reactivity engine designed for efficiency and minimal memory overhead:
+
+- **Doubly-Linked List Dependency Tracking**: Instead of using heavy `Set` objects, RoundJS uses a linked-list of subscription nodes. This eliminates array spreads and object allocations during signal updates, providing constant-time performance for adding/removing dependencies.
+- **Global Versioning (Clock)**: Every signal write increments a global version counter. Computed signals (`derive`) track the version of their dependencies and only recompute if they are "dirty" (out of date). This ensures true lazyness and avoids redundant calculations.
+- **Automatic Batching**: Multiple signal updates within the same execution cycle are batched. Effects and DOM updates only trigger once at the end of the batch, preventing "glitches" and unnecessary re-renders.
 
 ### `derive(fn)`
 
@@ -191,14 +238,6 @@ export default function Counter() {
     );
 }
 ```
-
-### Signals Internals
-
-RoundJS utilizes a high-performance reactivity engine designed for efficiency and minimal memory overhead:
-
-- **Doubly-Linked List Dependency Tracking**: Instead of using heavy `Set` objects, RoundJS uses a linked-list of subscription nodes. This eliminates array spreads and object allocations during signal updates, providing constant-time performance for adding/removing dependencies.
-- **Global Versioning (Clock)**: Every signal write increments a global version counter. Computed signals (`derive`) track the version of their dependencies and only recompute if they are "dirty" (out of date). This ensures true lazyness and avoids redundant calculations.
-- **Automatic Batching**: Multiple signal updates within the same execution cycle are batched. Effects and DOM updates only trigger once at the end of the batch, preventing "glitches" and unnecessary re-renders.
 
 ## JSX superset control flow
 
