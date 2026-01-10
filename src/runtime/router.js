@@ -17,6 +17,10 @@ let hasMatchForPath = false;
 const pathHasMatch = signal(false);
 const pathEvalReady = signal(true);
 
+// Per-path scroll positions so each route can keep its own scroll offset.
+const scrollPositions = hasWindow ? new Map() : null;
+let lastScrollPath = hasWindow ? window.location.pathname : '/';
+
 let defaultNotFoundComponent = null;
 let autoNotFoundMounted = false;
 let userProvidedNotFound = false;
@@ -30,7 +34,26 @@ function ensureListener() {
     mountAutoNotFound();
 
     window.addEventListener('popstate', () => {
-        currentPath(window.location.pathname);
+        const rawPrev = lastScrollPath;
+        const rawNext = window.location.pathname;
+
+        const prevPath = normalizePathname(rawPrev);
+        const nextPath = normalizePathname(rawNext);
+
+        if (scrollPositions) {
+            // Save scroll for the route we are leaving
+            const y = window.scrollY ?? window.pageYOffset ?? 0;
+            scrollPositions.set(prevPath, y);
+        }
+
+        lastScrollPath = rawNext;
+        currentPath(rawNext);
+
+        if (scrollPositions) {
+            // Restore scroll for the route we are entering (or default to top)
+            const saved = scrollPositions.get(nextPath) ?? 0;
+            window.scrollTo(0, saved);
+        }
     });
 }
 
@@ -76,7 +99,6 @@ export function useRouteReady() {
 export function getIsNotFound() {
     const pathname = normalizePathname(currentPath());
     if (pathname === '/') return false;
-    if (!(Boolean(pathEvalReady()) && lastPathEvaluated === pathname)) return false;
     return !Boolean(pathHasMatch());
 }
 
@@ -84,7 +106,8 @@ export function useIsNotFound() {
     return () => {
         const pathname = normalizePathname(currentPath());
         if (pathname === '/') return false;
-        if (!(Boolean(pathEvalReady()) && lastPathEvaluated === pathname)) return false;
+        // Mirror getIsNotFound: react immediately to the current path and
+        // the latest match flag, instead of waiting for pathEvalReady.
         return !Boolean(pathHasMatch());
     };
 }
@@ -136,12 +159,26 @@ export function navigate(to, options = {}) {
     if (!hasWindow) return;
     ensureListener();
 
+    const fromPath = normalizePathname(currentPath());
+    if (scrollPositions) {
+        const y = window.scrollY ?? window.pageYOffset ?? 0;
+        scrollPositions.set(fromPath, y);
+    }
+
     const normalizedTo = normalizeTo(to);
     const replace = Boolean(options.replace);
     if (replace) window.history.replaceState({}, '', normalizedTo);
     else window.history.pushState({}, '', normalizedTo);
 
-    currentPath(window.location.pathname);
+    const rawNext = window.location.pathname;
+    lastScrollPath = rawNext;
+    currentPath(rawNext);
+
+    if (scrollPositions) {
+        const nextPath = normalizePathname(rawNext);
+        const saved = scrollPositions.get(nextPath) ?? 0;
+        window.scrollTo(0, saved);
+    }
 }
 
 function applyHead({ title, meta, links, icon, favicon }) {

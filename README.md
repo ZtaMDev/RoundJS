@@ -146,33 +146,13 @@ export default function App() {
 You can render fenced code blocks with syntax highlighting:
 
 \`\`\`javascript
-import { Markdown } from '@round-core/markdown';
-
-export default function App() {
-  return (
-    <div>
-      <Markdown content="# Hello World" />
-    </div>
-  );
-}
+const value = signal(0);
 \`\`\`
 `;
 
     return (
         <div>
-            {/* Shiki highlighter preloaded for faster first paint */}
-            <Markdown
-                content={content}
-                options={{
-                    preloadHighlighter: true,
-                    theme: {
-                        markdownBackground: '#020617',
-                        markdownText: '#e5e7eb',
-                        primaryColor: '#e5e7eb',
-                        secondaryColor: '#38bdf8',
-                    }
-                }}
-            />
+            <Markdown content={content}/>
         </div>
     );
 }
