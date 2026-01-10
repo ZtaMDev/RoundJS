@@ -67,8 +67,11 @@ export function createElement(tag, props = {}, ...children) {
         }
 
         if (node instanceof Node) {
-            node._componentInstance = componentInstance;
-            componentInstance.nodes.push(node);
+            // Only set the instance if not already present (supports memoization/persistence)
+            if (!node._componentInstance) {
+                node._componentInstance = componentInstance;
+                componentInstance.nodes.push(node);
+            }
 
             componentInstance.mountTimerId = setTimeout(() => {
                 componentInstance.mountTimerId = null;

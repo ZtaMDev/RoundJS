@@ -282,8 +282,21 @@ export interface RouteProps {
     title?: string;
     /** Meta description to set in the document header when active. */
     description?: string;
-    /** Advanced head configuration including links and meta tags. */
-    head?: any;
+    /** If true, the route stays rendered (hidden) when not active. Preserves state. */
+    memo?: boolean;
+    /** Meta tags to set in the document header when active. */
+    meta?: any;
+    /** Advanced head configuration including links and icons. */
+    head?: { 
+        /** Title of the page. */
+        title?: string;
+        /** Links to include in the head. */
+        links?: string;
+        /** Icon to include in the head. */
+        icon?: string;
+        /** Favicon to include in the head. */
+        favicon?: string;
+    };
     /** Component or elements to render when matched. */
     children?: any;
 }
@@ -442,3 +455,14 @@ export function Suspense(props: SuspenseProps): any;
  * Defines static head metadata (titles, meta tags, etc.).
  */
 export function startHead(head: any): any;
+
+
+/**
+ * Raises an error to be handled by the runtime.
+ * Use cases:
+ * - Throwing errors in reactive functions
+ * - Throwing errors in try catch JSX statements
+ * 
+ * @param error - The error to raise.
+ */
+export function raise(error: any): never;

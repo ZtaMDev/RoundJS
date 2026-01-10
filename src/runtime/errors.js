@@ -150,3 +150,7 @@ export function initErrorHandling(container) {
         });
     }
 }
+
+export function raise(error) {
+    throw error;
+}

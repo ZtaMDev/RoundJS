@@ -1,4 +1,4 @@
-import { signal, effect } from './signals.js';
+import { signal, effect, batch } from './signals.js';
 import { createElement } from './dom.js';
 import { createContext, readContext } from './context.js';
 
@@ -26,6 +26,7 @@ let autoNotFoundMounted = false;
 let userProvidedNotFound = false;
 
 const RoutingContext = createContext('');
+const routeMemoCache = new Map();
 
 function ensureListener() {
     if (!hasWindow || listenerInitialized) return;
@@ -99,18 +100,30 @@ export function useRouteReady() {
 export function getIsNotFound() {
     const pathname = normalizePathname(currentPath());
     if (pathname === '/') return false;
-    return !Boolean(pathHasMatch());
+    if (pathHasMatch()) return false;
+    if (!pathEvalReady()) return false;
+    return true;
 }
 
 export function useIsNotFound() {
     return () => {
         const pathname = normalizePathname(currentPath());
         if (pathname === '/') return false;
-        // Mirror getIsNotFound: react immediately to the current path and
-        // the latest match flag, instead of waiting for pathEvalReady.
-        return !Boolean(pathHasMatch());
+        if (pathHasMatch()) return false;
+        if (!pathEvalReady()) return false;
+        return true;
     };
 }
+
+// Global effect to trigger path evaluation whenever the path changes.
+// This ensures that pathEvalReady and pathHasMatch are managed centrally.
+effect(() => {
+    const pathname = normalizePathname(currentPath());
+    beginPathEvaluation(pathname);
+}, { onLoad: false }); // We run it manually once below
+
+// Initialize synchronous evaluation for the starting path.
+beginPathEvaluation(normalizePathname(currentPath.peek()));
 
 function mountAutoNotFound() {
     if (!hasWindow || autoNotFoundMounted) return;
@@ -290,11 +303,13 @@ function matchRoute(route, pathname, exact = true) {
 
 function beginPathEvaluation(pathname) {
     if (pathname !== lastPathEvaluated) {
-        lastPathEvaluated = pathname;
-        hasMatchForPath = false;
-        pathHasMatch(false);
+        batch(() => {
+            lastPathEvaluated = pathname;
+            hasMatchForPath = false;
+            pathEvalReady(false);
+            pathHasMatch(false);
+        });
 
-        pathEvalReady(false);
         setTimeout(() => {
             if (lastPathEvaluated !== pathname) return;
             pathEvalReady(true);
@@ -314,6 +329,11 @@ export function setNotFound(Component) {
  * @param {string} [props.title] Page title to set when active.
  * @param {string} [props.description] Meta description to set when active.
  * @param {any} [props.children] Content to render.
+ * @param {object} [props.head] Advanced head configuration including links and meta tags.
+ * @param {string} [props.head.title] Title of the page.
+ * @param {string} [props.head.links] Links to include in the head.
+ * @param {string} [props.head.icon] Icon to include in the head.
+ * @param {string} [props.head.favicon] Favicon to include in the head.
  */
 export function Route(props = {}) {
     ensureListener();
@@ -321,7 +341,6 @@ export function Route(props = {}) {
     return createElement('span', { style: { display: 'contents' } }, () => {
         const parentPath = readContext(RoutingContext) || '';
         const pathname = normalizePathname(currentPath());
-        beginPathEvaluation(pathname);
 
         const routeProp = props.route ?? '/';
         if (typeof routeProp === 'string' && !routeProp.startsWith('/')) {
@@ -344,9 +363,45 @@ export function Route(props = {}) {
 
         const isRoot = fullRoute === '/';
         const exact = props.exact !== undefined ? Boolean(props.exact) : isRoot;
+        const isMatch = matchRoute(fullRoute, pathname, exact);
+
+        if (props.memo) {
+            if (isMatch) {
+                if (matchRoute(fullRoute, pathname, true)) {
+                    hasMatchForPath = true;
+                    pathHasMatch(true);
+                }
+
+                const mergedHead = (props.head && typeof props.head === 'object') ? props.head : {};
+                const meta = props.description
+                    ? ([{ name: 'description', content: String(props.description) }].concat(mergedHead.meta ?? props.meta ?? []))
+                    : (mergedHead.meta ?? props.meta);
+                const links = mergedHead.links ?? props.links;
+                const title = mergedHead.title ?? props.title;
+                const icon = mergedHead.icon ?? props.icon;
+                const favicon = mergedHead.favicon ?? props.favicon;
+
+                applyHead({ title, meta, links, icon, favicon });
+            }
+
+            if (routeMemoCache.has(fullRoute)) {
+                const cached = routeMemoCache.get(fullRoute);
+                cached.style.display = isMatch ? 'contents' : 'none';
+                return cached;
+            }
+
+            if (!isMatch) return null;
+
+            const memoContainer = createElement('div', { style: { display: 'contents' } },
+                createElement(RoutingContext.Provider, { value: fullRoute }, props.children)
+            );
+            memoContainer._roundKeepAlive = true;
+            routeMemoCache.set(fullRoute, memoContainer);
+            return memoContainer;
+        }
 
         // For nested routing, we match as a prefix so parents stay rendered while children are active
-        if (!matchRoute(fullRoute, pathname, exact)) return null;
+        if (!isMatch) return null;
 
         // If it's an exact match of the FULL segments, mark as matched for 404 purposes
         if (matchRoute(fullRoute, pathname, true)) {
@@ -375,55 +430,7 @@ export function Route(props = {}) {
  * @param {object} props Page properties (same as Route).
  */
 export function Page(props = {}) {
-    ensureListener();
-
-    return createElement('span', { style: { display: 'contents' } }, () => {
-        const parentPath = readContext(RoutingContext) || '';
-        const pathname = normalizePathname(currentPath());
-        beginPathEvaluation(pathname);
-
-        const routeProp = props.route ?? '/';
-        if (typeof routeProp === 'string' && !routeProp.startsWith('/')) {
-            throw new Error(`Invalid route: "${routeProp}". All routes must start with a forward slash "/". (Nested under: "${parentPath || 'root'}")`);
-        }
-
-        let fullRoute = '';
-        if (parentPath && parentPath !== '/') {
-            const cleanParent = parentPath.endsWith('/') ? parentPath.slice(0, -1) : parentPath;
-            const cleanChild = routeProp.startsWith('/') ? routeProp : '/' + routeProp;
-
-            if (cleanChild.startsWith(cleanParent + '/') || cleanChild === cleanParent) {
-                fullRoute = normalizePathname(cleanChild);
-            } else {
-                fullRoute = normalizePathname(cleanParent + cleanChild);
-            }
-        } else {
-            fullRoute = normalizePathname(routeProp);
-        }
-
-        const isRoot = fullRoute === '/';
-        const exact = props.exact !== undefined ? Boolean(props.exact) : isRoot;
-
-        if (!matchRoute(fullRoute, pathname, exact)) return null;
-
-        if (matchRoute(fullRoute, pathname, true)) {
-            hasMatchForPath = true;
-            pathHasMatch(true);
-        }
-
-        const mergedHead = (props.head && typeof props.head === 'object') ? props.head : {};
-        const meta = props.description
-            ? ([{ name: 'description', content: String(props.description) }].concat(mergedHead.meta ?? props.meta ?? []))
-            : (mergedHead.meta ?? props.meta);
-        const links = mergedHead.links ?? props.links;
-        const title = mergedHead.title ?? props.title;
-        const icon = mergedHead.icon ?? props.icon;
-        const favicon = mergedHead.favicon ?? props.favicon;
-
-        applyHead({ title, meta, links, icon, favicon });
-
-        return createElement(RoutingContext.Provider, { value: fullRoute }, props.children);
-    });
+    return Route(props);
 }
 
 /**
@@ -436,7 +443,6 @@ export function NotFound(props = {}) {
 
     return createElement('span', { style: { display: 'contents' } }, () => {
         const pathname = normalizePathname(currentPath());
-        beginPathEvaluation(pathname);
 
         const ready = pathEvalReady();
         const hasMatch = pathHasMatch();

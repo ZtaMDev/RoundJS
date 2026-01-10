@@ -116,6 +116,7 @@ const observer = (typeof MutationObserver !== 'undefined')
         mutations.forEach(mutation => {
             if (mutation.removedNodes.length > 0) {
                 mutation.removedNodes.forEach(node => {
+                    if (node._roundKeepAlive) return;
                     if (node._componentInstance) {
                         unmountComponent(node._componentInstance);
                     }
@@ -127,6 +128,7 @@ const observer = (typeof MutationObserver !== 'undefined')
     : null;
 
 function cleanupNodeRecursively(node) {
+    if (node._roundKeepAlive) return;
     if (node._componentInstance) {
         unmountComponent(node._componentInstance);
     }

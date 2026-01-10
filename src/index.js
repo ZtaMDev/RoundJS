@@ -14,7 +14,8 @@ import * as Router from './runtime/router.js';
 import * as Suspense from './runtime/suspense.js';
 import * as Context from './runtime/context.js';
 import * as Store from './runtime/store.js';
-
+import { raise } from './runtime/errors.js';
+export { raise } from './runtime/errors.js';
 export function render(Component, container) {
     Lifecycle.initLifecycleRoot(container);
     // Errors are no longer handled by a global overlay.
@@ -31,5 +32,6 @@ export default {
     ...Suspense,
     ...Context,
     ...Store,
-    render
+    render,
+    raise
 };

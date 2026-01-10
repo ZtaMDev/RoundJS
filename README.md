@@ -12,20 +12,20 @@
   <em><b>Round</b> is a lightweight, DOM-first framework for building SPAs with fine-grained reactivity, and fast, predictable updates powered by signals and bindables</em>
 </h3>
 
-
 <div align="center">
  
 Extension for [VSCode](https://marketplace.visualstudio.com/items?itemName=ZtaMDev.round) and [OpenVSX](https://open-vsx.org/extension/ztamdev/round)
 
 </div>
 
---- 
+---
 
 Instead of a Virtual DOM diff, Round updates the UI by subscribing DOM updates directly to reactive primitives **signals** and **bindables**. This keeps rendering predictable, small, and fast for interactive apps.
 
 The `round-core` package is the **foundation of RoundJS**.
 
 You can think of `round-core` as:
+
 - A **framework-level runtime**, not just a state library
 - Comparable in scope to React + Router + Signals, but significantly smaller
 - Suitable for fast SPAs and simple SSR setups without heavy infrastructure
@@ -101,17 +101,19 @@ such as extended control flow.
 Example `src/app.round`:
 
 ```jsx
-import { Route } from 'round-core';
-import { Counter } from './counter.round';
+import { Route } from "round-core";
+import { Counter } from "./counter.round";
 
 export default function App() {
-    return (
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-            <Route route="/" title="Home">
-                <Counter />
-            </Route>
-        </div>
-    );
+  return (
+    <div
+      style={{ display: "flex", flexDirection: "column", alignItems: "center" }}
+    >
+      <Route route="/" title="Home">
+        <Counter />
+      </Route>
+    </div>
+  );
 }
 ```
 
@@ -126,26 +128,23 @@ Create a reactive signal.
 - Use `.value` to read/write the current value in a non-subscribing way (static access).
 
 ```jsx
-import { signal } from 'round-core';
+import { signal } from "round-core";
 
 export function Counter() {
-    const count = signal(0);
+  const count = signal(0);
 
-    return (
-        <div>
-            <p>Count: {count()}</p>
+  return (
+    <div>
+      <p>Count: {count()}</p>
 
-            <button onClick={() => count(count() + 1)}>
-                Increment
-            </button>
+      <button onClick={() => count(count() + 1)}>Increment</button>
 
-            <button onClick={() => count(0)}>
-                Reset
-            </button>
-        </div>
-    );
+      <button onClick={() => count(0)}>Reset</button>
+    </div>
+  );
 }
 ```
+
 ##### Explanation:
 
 - `signal(0)` creates a reactive value initialized to 0
@@ -157,6 +156,7 @@ export function Counter() {
 - The component function runs once — only the text node updates when count changes
 
 #### Non-reactive (static) access with .value
+
 ```jsx
 const count = signal(5);
 
@@ -224,7 +224,7 @@ export default function Counter() {
     return (
         <div>
             <h1>Count: {count()} (Doubled: {doubled()})</h1>
-            
+
             {/* Control flow is part of the Round JSX superset */}
             {if(count() > 5){
                  <p style="color: red">Count is high!</p>
@@ -246,18 +246,21 @@ Round extends JSX inside `.round` files with a control-flow syntax that compiles
 ### `if / else if / else`
 
 ```jsx
-{if(user.loggedIn){
-    <Dashboard />
-} else if(user.loading){
-    <div>Loading...</div>
-} else {
-    <Login />
-}}
+{
+  if (user.loggedIn) {
+    <Dashboard />;
+  } else if (user.loading) {
+    <div>Loading...</div>;
+  } else {
+    <Login />;
+  }
+}
 ```
 
 Notes:
+
 - Conditions may be normal JS expressions.
-- For *simple paths* like `flags.showCounter` (identifier/member paths), Round will auto-unwrap signal-like values (call them) so the condition behaves as expected.
+- For _simple paths_ like `flags.showCounter` (identifier/member paths), Round will auto-unwrap signal-like values (call them) so the condition behaves as expected.
 - Multiple elements inside a block are automatically wrapped in a Fragment.
 
 ### `for (... in ...)`
@@ -268,26 +271,30 @@ Notes:
 }}
 ```
 
-This compiles to efficient **keyed reconciliation** using the `ForKeyed` runtime component. 
+This compiles to efficient **keyed reconciliation** using the `ForKeyed` runtime component.
 
 #### Keyed vs Unkeyed
+
 - **Keyed (Recommended)**: By providing `key=expr`, Round maintains the identity of DOM nodes. If the list reorders, Round moves the existing nodes instead of recreating them. This preserves local state (like input focus, cursor position, or CSS animations).
 - **Unkeyed**: If no key is provided, Round simply maps over the list. Reordering the list will cause nodes to be reused based on their index, which might lead to state issues in complex lists.
 
 ### `switch(...)`
 
 ```jsx
-{switch(status()){
-    case 'loading': 
-        <Spinner />;
-    case 'error':
-        <ErrorMessage />;
+{
+  switch (status()) {
+    case "loading":
+      <Spinner />;
+    case "error":
+      <ErrorMessage />;
     default:
-        <DataView />;
-}}
+      <DataView />;
+  }
+}
 ```
 
 Notes:
+
 - The `switch` expression is automatically wrapped in a reactive tracker, ensuring that the view updates surgically when the condition (e.g., a signal) changes.
 - Each case handles its own rendering without re-running the parent component.
 
@@ -299,6 +306,7 @@ Round supports both static and **reactive** `try/catch` blocks inside JSX.
 - **Reactive**: By passing one or more signals to `try(...)`, the block will **automatically re-run** if any of those signals (or their dependencies) update. This is perfect for handling transient errors in async data.
 
 **Single dependency:**
+
 ```jsx
 {try(user()) {
     // Note: we access .error because it is a asyncSignal() not a normal signal
@@ -332,15 +340,15 @@ You can track multiple signals by listing them using the comma operator. Both si
 Run `fn` whenever the signals it reads change.
 
 ```javascript
-import { signal, effect } from 'round-core';
+import { signal, effect } from "round-core";
 
-const name = signal('Ada');
+const name = signal("Ada");
 
 effect(() => {
-    console.log('Name changed:', name());
+  console.log("Name changed:", name());
 });
 
-name('Grace');
+name("Grace");
 ```
 
 ### `untrack(fn)`
@@ -348,15 +356,15 @@ name('Grace');
 Run a function without tracking any signals it reads.
 
 ```javascript
-import { signal, untrack, effect } from 'round-core';
+import { signal, untrack, effect } from "round-core";
 
 const count = signal(0);
 effect(() => {
-    console.log('Count is:', count());
-    untrack(() => {
-        // This read won't trigger the effect if it changes elsewhere
-        console.log('Static value:', count());
-    });
+  console.log("Count is:", count());
+  untrack(() => {
+    // This read won't trigger the effect if it changes elsewhere
+    console.log("Static value:", count());
+  });
 });
 ```
 
@@ -365,17 +373,17 @@ effect(() => {
 `bindable()` creates a signal intended for **two-way DOM bindings**.
 
 ```jsx
-import { bindable } from 'round-core';
+import { bindable } from "round-core";
 
 export function Example() {
-    const email = bindable('');
+  const email = bindable("");
 
-    return (
-        <div>
-            <input bind:value={email} placeholder="Email" />
-            <div>Typed: {email()}</div>
-        </div>
-    );
+  return (
+    <div>
+      <input bind:value={email} placeholder="Email" />
+      <div>Typed: {email()}</div>
+    </div>
+  );
 }
 ```
 
@@ -393,23 +401,23 @@ Round will warn if the value is not signal-like, and will warn if you bind a pla
 Round supports object-shaped state with ergonomic deep bindings via proxies.
 
 ```jsx
-import { bindable } from 'round-core';
+import { bindable } from "round-core";
 
 export function Profile() {
-    const user = bindable.object({
-        profile: { bio: '' },
-        flags: { newsletter: false }
-    });
+  const user = bindable.object({
+    profile: { bio: "" },
+    flags: { newsletter: false },
+  });
 
-    return (
-        <div>
-            <textarea bind:value={user.profile.bio} />
-            <label>
-                <input type="checkbox" bind:checked={user.flags.newsletter} />
-                Subscribe
-            </label>
-        </div>
-    );
+  return (
+    <div>
+      <textarea bind:value={user.profile.bio} />
+      <label>
+        <input type="checkbox" bind:checked={user.flags.newsletter} />
+        Subscribe
+      </label>
+    </div>
+  );
 }
 ```
 
@@ -425,16 +433,16 @@ const store = createStore({
     todos: [],
     filter: 'all'
 }, {
-    addTodo: (state, text) => ({ 
-        ...state, 
-        todos: [...state.todos, { text, done: false }] 
+    addTodo: (state, text) => ({
+        ...state,
+        todos: [...state.todos, { text, done: false }]
     })
 });
 
 // 2. Use in Component
 export function TodoList() {
     const todos = store.use('todos'); // Returns a bindable signal
-    
+
     return (
         <div>
             {for(todo in todos()){
@@ -446,10 +454,10 @@ export function TodoList() {
 }
 
 // 3. Persistence (Optional)
-store.persist('my-app-store', { 
+store.persist('my-app-store', {
     debounce: 100, // ms
-    exclude: ['someSecretKey'] 
-}); 
+    exclude: ['someSecretKey']
+});
 
 // 4. Advanced Methods
 store.patch({ filter: 'completed' }); // Update multiple keys at once
@@ -467,23 +475,22 @@ Attach validation to a signal/bindable.
 - `options.validateInitial` can trigger validation on startup.
 
 ```jsx
-import { bindable } from 'round-core';
+import { bindable } from "round-core";
 
 export function EmailField() {
-    const email = bindable('')
-        .validate(
-            (v) => v.includes('@') || 'Invalid email',
-            { validateOn: 'blur' }
-        );
+  const email = bindable("").validate(
+    (v) => v.includes("@") || "Invalid email",
+    { validateOn: "blur" }
+  );
 
-    return (
-        <div>
-            <input bind:value={email} placeholder="name@example.com" />
-            <div style={() => ({ color: email.error() ? 'crimson' : '#666' })}>
-                {email.error}
-            </div>
-        </div>
-    );
+  return (
+    <div>
+      <input bind:value={email} placeholder="name@example.com" />
+      <div style={() => ({ color: email.error() ? "crimson" : "#666" })}>
+        {email.error}
+      </div>
+    </div>
+  );
 }
 ```
 
@@ -492,30 +499,34 @@ export function EmailField() {
 Round provides hooks to tap into the lifecycle of components. These must be called during the synchronous execution of your component function.
 
 ### `onMount(fn)`
+
 Runs after the component is first created and its elements are added to the DOM. If `fn` returns a function, it's used as a cleanup (equivalent to `onUnmount`).
 
 ### `onUnmount(fn)`
+
 Runs when the component's elements are removed from the DOM.
 
 ### `onUpdate(fn)`
-Runs whenever any signal read during the component's *initial* render is updated.
+
+Runs whenever any signal read during the component's _initial_ render is updated.
 
 ### `onCleanup(fn)`
+
 Alias for `onUnmount`.
 
 ```jsx
-import { onMount, onUnmount } from 'round-core';
+import { onMount, onUnmount } from "round-core";
 
 export function MyComponent() {
-    onMount(() => {
-        console.log('Mounted!');
-        const timer = setInterval(() => {}, 1000);
-        return () => clearInterval(timer); // Cleanup
-    });
+  onMount(() => {
+    console.log("Mounted!");
+    const timer = setInterval(() => {}, 1000);
+    return () => clearInterval(timer); // Cleanup
+  });
 
-    onUnmount(() => console.log('Goodbye!'));
+  onUnmount(() => console.log("Goodbye!"));
 
-    return <div>Hello</div>;
+  return <div>Hello</div>;
 }
 ```
 
@@ -526,24 +537,24 @@ Round includes router primitives intended for SPA navigation. All route paths mu
 ### Basic Usage
 
 ```jsx
-import { Route, Link } from 'round-core';
+import { Route, Link } from "round-core";
 
 export default function App() {
-    return (
-        <div>
-            <nav>
-                <Link href="/">Home</Link>
-                <Link href="/about">About</Link>
-            </nav>
+  return (
+    <div>
+      <nav>
+        <Link href="/">Home</Link>
+        <Link href="/about">About</Link>
+      </nav>
 
-            <Route route="/" title="Home" exact>
-                <div>Welcome Home</div>
-            </Route>
-            <Route route="/about" title="About">
-                <div>About Us Content</div>
-            </Route>
-        </div>
-    );
+      <Route route="/" title="Home" exact>
+        <div>Welcome Home</div>
+      </Route>
+      <Route route="/about" title="About">
+        <div>About Us Content</div>
+      </Route>
+    </div>
+  );
 }
 ```
 
@@ -556,31 +567,50 @@ Routes can be nested to create hierarchical layouts. Child routes automatically 
 
 ```jsx
 <Route route="/dashboard" title="Dashboard">
-    <h1>Dashboard Shell</h1>
+  <h1>Dashboard Shell</h1>
 
-    {/* This route matches /dashboard/profile */}
-    <Route route="/dashboard/profile">
-        <h2>User Profile</h2>
-    </Route>
+  {/* This route matches /dashboard/profile */}
+  <Route route="/dashboard/profile">
+    <h2>User Profile</h2>
+  </Route>
 
-    {/* This route matches /dashboard/settings */}
-    <Route route="/dashboard/settings">
-        <h2>Settings</h2>
-    </Route>
+  {/* This route matches /dashboard/settings */}
+  <Route route="/dashboard/settings">
+    <h2>Settings</h2>
+  </Route>
 </Route>
 ```
+
+### Routing Memoization (Keep-Alive)
+
+Round allows you to **persist the state and DOM nodes** of a route even when you navigate away. This is perfect for maintaining the state of a complex list or preserving the state of a multi-step form.
+
+When `memo` is set to `true`, the route's DOM nodes are hidden using `display: none` instead of being removed. This ensures that:
+
+- **Signals and local state** are preserved.
+- **CSS Transitions and Animations** don't reset.
+- **Form inputs** maintain their value and focus.
+
+```jsx
+<Route route="/explore" memo={true}>
+  <ExploreFeed />
+</Route>
+```
+
+> [!TIP]
+> This works even if the `Route` component itself is unmounted and remounted (e.g., within an `if` block), as Round maintains a global persistence cache for memoized routes.
 
 ## Suspense and lazy loading
 
 Round supports `Suspense` for promise-based rendering and `lazy()` for code splitting.
 
 ```jsx
-import { Suspense, lazy } from 'round-core';
-const LazyWidget = lazy(() => import('./Widget'));
+import { Suspense, lazy } from "round-core";
+const LazyWidget = lazy(() => import("./Widget"));
 
 <Suspense fallback={<div>Loading...</div>}>
-    <LazyWidget />
-</Suspense>
+  <LazyWidget />
+</Suspense>;
 ```
 
 ## Markdown rendering with `@round-core/markdown`
@@ -603,12 +633,15 @@ bun add @round-core/markdown
 Then use it in a `.round` file or JSX component:
 
 ```jsx
-import { createElement } from 'round-core';
-import { Markdown, defaultMarkdownStyles as markdown } from '@round-core/markdown';
-import '@round-core/markdown/styles.css';
+import { createElement } from "round-core";
+import {
+  Markdown,
+  defaultMarkdownStyles as markdown,
+} from "@round-core/markdown";
+import "@round-core/markdown/styles.css";
 
 export default function App() {
-    const content = `
+  const content = `
 # Markdown with code blocks
 
 You can render fenced code blocks with syntax highlighting:
@@ -618,11 +651,11 @@ const value = signal(0);
 \`\`\`
 `;
 
-    return (
-        <div>
-            <Markdown content={content}/>
-        </div>
-    );
+  return (
+    <div>
+      <Markdown content={content} />
+    </div>
+  );
 }
 ```
 
