@@ -115,80 +115,6 @@ export default function App() {
 }
 ```
 
-## Markdown rendering with `@round-core/markdown`
-
-Round includes an optional companion package for markdown rendering with
-syntax highlighting and rich code blocks.
-
-Install it alongside `round-core`:
-
-```bash
-npm install @round-core/markdown
-```
-
-or with Bun:
-
-```bash
-bun add @round-core/markdown
-```
-
-Then use it in a `.round` file or JSX component:
-
-```jsx
-import { createElement } from 'round-core';
-import { Markdown, defaultMarkdownStyles as markdown } from '@round-core/markdown';
-import '@round-core/markdown/styles.css';
-
-export default function App() {
-    const content = `
-# Markdown with code blocks
-
-You can render fenced code blocks with syntax highlighting:
-
-\`\`\`javascript
-const value = signal(0);
-\`\`\`
-`;
-
-    return (
-        <div>
-            <Markdown content={content}/>
-        </div>
-    );
-}
-```
-
-You can also theme the markdown surface (background/text) and accents via
-`options.theme`:
-
-```jsx
-<Markdown
-  content={content}
-  options={{
-    theme: {
-      // Dark card-like surface
-      markdownBackground: '#020617',
-      markdownText: '#e5e7eb',
-      primaryColor: '#e5e7eb',
-      secondaryColor: '#38bdf8',
-    },
-  }}
-/>
-
-<Markdown
-  content={content}
-  options={{
-    theme: {
-      // Light mode
-      markdownBackground: '#ffffff',
-      markdownText: '#0f172a',
-      primaryColor: '#0f172a',
-      secondaryColor: '#2563eb',
-    },
-  }}
-/>
-```
-
 ## Core API & Examples
 
 ### `signal(initialValue)`
@@ -198,6 +124,39 @@ Create a reactive signal.
 - Call with no arguments to **read**.
 - Call with one argument to **write**.
 - Use `.value` to read/write the current value in a non-subscribing way (static access).
+
+### `asyncSignal(fetcher)`
+
+Create a signal that manages asynchronous data fetching.
+
+- It returns a signal that resolves to the data once fetched.
+- **`.pending`**: A reactive signal (boolean) indicating if the fetch is in progress.
+- **`.error`**: A reactive signal containing any error that occurred during fetching.
+- **`.refetch()`**: A method to manually trigger a re-fetch.
+
+```jsx
+import { asyncSignal } from 'round-core';
+
+const user = asyncSignal(async () => {
+    const res = await fetch('/api/user');
+    return res.json();
+});
+
+export function UserProfile() {
+    return (
+        <div>
+            {if(user.pending()){
+                <div>Loading...</div>
+            } else if(user.error()){
+                <div>Error: {user.error().message}</div>
+            } else {
+                <div>Welcome, {user().name}</div>
+            }}
+            <button onClick={() => user.refetch()}>Reload</button>
+        </div>
+    );
+}
+```
 
 ### `derive(fn)`
 
@@ -343,39 +302,6 @@ effect(() => {
 });
 
 name('Grace');
-```
-
-### `asyncSignal(fetcher)`
-
-Create a signal that manages asynchronous data fetching.
-
-- It returns a signal that resolves to the data once fetched.
-- **`.pending`**: A reactive signal (boolean) indicating if the fetch is in progress.
-- **`.error`**: A reactive signal containing any error that occurred during fetching.
-- **`.refetch()`**: A method to manually trigger a re-fetch.
-
-```jsx
-import { asyncSignal } from 'round-core';
-
-const user = asyncSignal(async () => {
-    const res = await fetch('/api/user');
-    return res.json();
-});
-
-export function UserProfile() {
-    return (
-        <div>
-            {if(user.pending()){
-                <div>Loading...</div>
-            } else if(user.error()){
-                <div>Error: {user.error().message}</div>
-            } else {
-                <div>Welcome, {user().name}</div>
-            }}
-            <button onClick={() => user.refetch()}>Reload</button>
-        </div>
-    );
-}
 ```
 
 ### `untrack(fn)`
@@ -618,6 +544,79 @@ const LazyWidget = lazy(() => import('./Widget'));
 </Suspense>
 ```
 
+## Markdown rendering with `@round-core/markdown`
+
+Round includes an optional companion package for markdown rendering with
+syntax highlighting and rich code blocks.
+
+Install it alongside `round-core`:
+
+```bash
+npm install @round-core/markdown
+```
+
+or with Bun:
+
+```bash
+bun add @round-core/markdown
+```
+
+Then use it in a `.round` file or JSX component:
+
+```jsx
+import { createElement } from 'round-core';
+import { Markdown, defaultMarkdownStyles as markdown } from '@round-core/markdown';
+import '@round-core/markdown/styles.css';
+
+export default function App() {
+    const content = `
+# Markdown with code blocks
+
+You can render fenced code blocks with syntax highlighting:
+
+\`\`\`javascript
+const value = signal(0);
+\`\`\`
+`;
+
+    return (
+        <div>
+            <Markdown content={content}/>
+        </div>
+    );
+}
+```
+
+You can also theme the markdown surface (background/text) and accents via
+`options.theme`:
+
+```jsx
+<Markdown
+  content={content}
+  options={{
+    theme: {
+      // Dark card-like surface
+      markdownBackground: '#020617',
+      markdownText: '#e5e7eb',
+      primaryColor: '#e5e7eb',
+      secondaryColor: '#38bdf8',
+    },
+  }}
+/>
+
+<Markdown
+  content={content}
+  options={{
+    theme: {
+      // Light mode
+      markdownBackground: '#ffffff',
+      markdownText: '#0f172a',
+      primaryColor: '#0f172a',
+      secondaryColor: '#2563eb',
+    },
+  }}
+/>
+```
 
 ## Error handling
 
