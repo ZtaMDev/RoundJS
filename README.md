@@ -149,9 +149,9 @@ export function Counter() {
 
 - `signal(0)` creates a reactive value initialized to 0
 
-- `Calling count()` reads the current value and subscribes the DOM
+- Calling `count()` reads the current value and subscribes the DOM
 
-- `Calling count(newValue)` writes a new value and updates only the subscribed nodes
+- Calling `count(newValue)` writes a new value and updates only the subscribed nodes
 
 - The component function runs once — only the text node updates when count changes
 
