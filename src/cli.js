@@ -231,7 +231,7 @@ async function runInit({ name }) {
             preview: 'round preview'
         },
         dependencies: {
-            'round-core': '^0.0.4'
+            'round-core': '^0.1.9'
         },
         devDependencies: {
             vite: '^5.0.0'
