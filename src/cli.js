@@ -252,11 +252,11 @@ async function runInit({ name }) {
         },
         dependencies: {
             'round-core': '^' + getRoundVersion(),
-            '@round-core/shared': '^1.0.0'
+            '@round-core/shared': 'latest'
         },
         devDependencies: {
-            '@round-core/lint': '^0.1.0',
-            '@round-core/prettier': '^0.1.0',
+            '@round-core/lint': 'latest',
+            '@round-core/prettier': 'latest',
             'eslint': '^9.39.2',
             'espree': '^10.0.0',
             'globals': '^17.0.0',
