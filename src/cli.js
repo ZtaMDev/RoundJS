@@ -211,8 +211,6 @@ async function runInit({ name }) {
 
     const projectDir = path.resolve(process.cwd(), name);
     const srcDir = path.join(projectDir, 'src');
-    const vscodeDir = path.join(projectDir, '.vscode');
-    const vscodeSettingsPath = path.join(vscodeDir, 'settings.json');
     const pkgPath = path.join(projectDir, 'package.json');
     const configPath = path.join(projectDir, 'round.config.json');
     const viteConfigPath = path.join(projectDir, 'vite.config.js');
@@ -222,22 +220,6 @@ async function runInit({ name }) {
     const counterRoundPath = path.join(srcDir, 'counter.round');
 
     ensureDir(srcDir);
-    ensureDir(vscodeDir);
-
-    writeFileIfMissing(vscodeSettingsPath, JSON.stringify({
-        "eslint.validate": [
-            "javascript",
-            "javascriptreact",
-            "round"
-        ],
-        "prettier.documentSelectors": [
-            "**/*.round"
-        ],
-        "[round]": {
-            "editor.defaultFormatter": "esbenp.prettier-vscode"
-        }
-    }, null, 4) + '\n');
-
     writeFileIfMissing(pkgPath, JSON.stringify({
         name,
         private: true,
