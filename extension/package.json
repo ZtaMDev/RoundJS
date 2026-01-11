@@ -2,7 +2,7 @@
   "name": "round",
   "displayName": "Round",
   "description": "Language support for .round (Round framework)",
-  "version": "0.1.8",
+  "version": "0.1.9",
   "main": "./dist/extension.js",
   "publisher": "ZtaMDev",
   "icon": "Round.png",
