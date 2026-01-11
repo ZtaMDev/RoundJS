@@ -1,0 +1,7 @@
+{
+  "name": "@round-core/shared",
+  "version": "1.0.0",
+  "description": "Shared RoundJS parsing and preprocessing logic",
+  "main": "src/index.js",
+  "type": "module"
+}

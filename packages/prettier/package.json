@@ -1,0 +1,16 @@
+{
+  "name": "@round-core/prettier",
+  "version": "0.1.0",
+  "description": "Prettier plugin for RoundJS",
+  "type": "module",
+  "main": "src/index.js",
+  "files": [
+    "src"
+  ],
+  "peerDependencies": {
+    "prettier": "^3.0.0"
+  },
+  "dependencies": {
+    "@round-core/shared": "latest"
+  }
+}

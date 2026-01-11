@@ -1,7 +1,10 @@
 {
     "name": "round-core",
-    "version": "0.2.1",
+    "version": "0.2.2",
     "description": "A lightweight frontend framework for SPA with signals and fine grained reactivity",
+    "workspaces": [
+        "packages/*"
+    ],
     "main": "./src/index.js",
     "types": "./src/index.d.ts",
     "readme": "README.md",
@@ -29,8 +32,6 @@
         "round": "./src/cli.js"
     },
     "scripts": {
-        "dev": "node ./src/cli.js dev --config ./test/main/round.config.json",
-        "build": "node ./src/cli.js build --config ./test/main/round.config.json",
         "bench": "bun run --cwd benchmarks bench",
         "bench:build": "bun run --cwd benchmarks bench:build",
         "bench:runtime": "bun run --cwd benchmarks bench:runtime"
@@ -49,6 +50,8 @@
     "devDependencies": {
         "@types/node": "latest",
         "bun-types": "latest",
+        "eslint": "^9.39.2",
+        "prettier": "^3.7.4",
         "vitest": "^1.6.0"
     }
 }

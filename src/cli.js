@@ -211,14 +211,32 @@ async function runInit({ name }) {
 
     const projectDir = path.resolve(process.cwd(), name);
     const srcDir = path.join(projectDir, 'src');
-
-    ensureDir(srcDir);
-
+    const vscodeDir = path.join(projectDir, '.vscode');
+    const vscodeSettingsPath = path.join(vscodeDir, 'settings.json');
     const pkgPath = path.join(projectDir, 'package.json');
     const configPath = path.join(projectDir, 'round.config.json');
     const viteConfigPath = path.join(projectDir, 'vite.config.js');
+    const prettierConfigPath = path.join(projectDir, '.prettierrc');
+    const eslintConfigPath = path.join(projectDir, 'eslint.config.js');
     const appRoundPath = path.join(srcDir, 'app.round');
     const counterRoundPath = path.join(srcDir, 'counter.round');
+
+    ensureDir(srcDir);
+    ensureDir(vscodeDir);
+
+    writeFileIfMissing(vscodeSettingsPath, JSON.stringify({
+        "eslint.validate": [
+            "javascript",
+            "javascriptreact",
+            "round"
+        ],
+        "prettier.documentSelectors": [
+            "**/*.round"
+        ],
+        "[round]": {
+            "editor.defaultFormatter": "esbenp.prettier-vscode"
+        }
+    }, null, 4) + '\n');
 
     writeFileIfMissing(pkgPath, JSON.stringify({
         name,
@@ -228,15 +246,70 @@ async function runInit({ name }) {
         scripts: {
             dev: 'round dev',
             build: 'round build',
-            preview: 'round preview'
+            preview: 'round preview',
+            lint: 'eslint src',
+            format: 'prettier --write src'
         },
         dependencies: {
-            'round-core': '^0.1.9'
+            'round-core': '^' + getRoundVersion(),
+            '@round-core/shared': '^1.0.0'
         },
         devDependencies: {
-            vite: '^5.0.0'
+            '@round-core/lint': '^0.1.0',
+            '@round-core/prettier': '^0.1.0',
+            'eslint': '^9.39.2',
+            'espree': '^10.0.0',
+            'globals': '^17.0.0',
+            'prettier': '^3.7.4',
+            'vite': '^5.0.0'
         }
     }, null, 4) + '\n');
+
+    writeFileIfMissing(prettierConfigPath, JSON.stringify({
+        plugins: ["@round-core/prettier"],
+        overrides: [
+            {
+                files: "*.round",
+                options: {
+                    parser: "round"
+                }
+            }
+        ]
+    }, null, 4) + '\n');
+
+    const eslintConfigContent = `import lintPlugin from '@round-core/lint';
+import globals from 'globals';
+import * as espree from 'espree';
+
+export default [
+    {
+        files: ["**/*.round"],
+        plugins: {
+            '@round-core/lint': lintPlugin
+        },
+        processor: lintPlugin.processors['.round'],
+        rules: {
+            "no-unused-vars": "warn",
+            "no-undef": "error"
+        },
+        languageOptions: {
+            parser: espree,
+            ecmaVersion: "latest",
+            sourceType: "module",
+            globals: {
+                ...globals.browser,
+                ...globals.node,
+            },
+            parserOptions: {
+                ecmaFeatures: {
+                    jsx: true
+                }
+            }
+        }
+    }
+];
+`;
+    writeFileIfMissing(eslintConfigPath, eslintConfigContent);
 
     writeFileIfMissing(configPath, JSON.stringify({
         mode,

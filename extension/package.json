@@ -36,8 +36,25 @@
   ],
   "contributes": {
     "configurationDefaults": {
+      "eslint.probe": [
+        "javascript",
+        "javascriptreact",
+        "typescript",
+        "typescriptreact",
+        "html",
+        "vue",
+        "markdown",
+        "round"
+      ],
+      "eslint.validate": [
+        "round"
+      ],
+      "prettier.documentSelectors": [
+        "**/*.round"
+      ],
       "[round]": {
-        "editor.maxTokenizationLineLength": 2500
+        "editor.maxTokenizationLineLength": 2500,
+        "editor.defaultFormatter": "esbenp.prettier-vscode"
       }
     },
     "languages": [
