@@ -309,9 +309,9 @@ Round supports both static and **reactive** `try/catch` blocks inside JSX.
 
 ```jsx
 {try(user()) {
-    // Note: we access .error because it is a asyncSignal() not a normal signal
+    {/* Note: we access .error because it is a asyncSignal() not a normal signal */}
     {if(user().error){
-        throw new Error(user().error);
+        raise(user().error) {/* raise() is a function to throw an error in JSX and is imported from 'round-core' */}
     }}
     <Profile data={user()} />
 } catch(e) {
