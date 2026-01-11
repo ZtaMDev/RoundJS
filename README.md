@@ -712,13 +712,6 @@ The CLI is intended for day-to-day development:
 
 Run `round -h` to see available commands.
 
-## Performance
-
-RoundJS sits in a powerful "middle ground" of performance:
-
-- **vs React**: Round's fine-grained reactivity is **massively faster** (>30x in micro-benchmarks) than React's component-level reconciliation. DOM updates are surgical and don't require diffing a virtual tree.
-- **vs Preact Signals**: While highly optimized, RoundJS signals are currently slightly slower than Preact Signals (~10x difference in raw signal-to-signal updates), as Preact utilizes more aggressive internal optimizations. However, for most real-world applications, RoundJS provides more than enough performance.
-
 ## Status
 
 Round is under active development and the API is still stabilizing. The README is currently the primary documentation; a dedicated documentation site will be built later using Round itself.
